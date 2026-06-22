@@ -125,12 +125,16 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
       const [sheets, logs, pilot, vehicles] = await Promise.all([
         getRouteSheets(), getAuditLogs(), getPilotStatus(), getPilotVehicles(),
       ]);
-      setRouteSheets(sheets);
-      setAuditLogs(logs);
+      setRouteSheets(Array.isArray(sheets) ? sheets : []);
+      setAuditLogs(Array.isArray(logs) ? logs : []);
       setPilotStatus(pilot);
-      setPilotVehicles(vehicles);
+      setPilotVehicles(Array.isArray(vehicles) ? vehicles : []);
     } catch (caught) {
-      setAdminError(caught instanceof Error ? caught.message : 'Не вдалося завантажити дані адмін-панелі.');
+      console.error('[AdminPage] data load failed', caught);
+      setRouteSheets([]);
+      setAuditLogs([]);
+      setPilotVehicles([]);
+      setAdminError('Не вдалося завантажити дані. Перевірте з’єднання з сервером.');
     } finally {
       setLoading(false);
     }

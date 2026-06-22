@@ -5,6 +5,7 @@ import { BADGE_NUMBER_ERROR, isValidBadgeNumber } from '../utils/badgeNumber';
 import { ApiError, apiGet, apiPost, isApiUnavailableError } from './apiClient';
 import { addAuditLog } from './auditService';
 import { getOfficerToken } from './officerService';
+import { extractEntity, extractList } from '../utils/apiResponse';
 
 interface RouteSheetResponse {
   success: boolean;
@@ -127,7 +128,7 @@ export async function getRouteSheets(filters: RouteSheetFilters = {}): Promise<R
   if (filters.isPilot !== undefined) params.set('isPilot', String(filters.isPilot));
   try {
     const query = params.size ? `?${params.toString()}` : '';
-    return (await apiGet<RouteSheetsResponse>(`/api/route-sheets${query}`)).routeSheets.map(normalizeRouteSheet);
+    return extractList<RouteSheet>(await apiGet<unknown>(`/api/route-sheets${query}`), 'routeSheets').map(normalizeRouteSheet);
   } catch (error) {
     if (!isApiUnavailableError(error)) throw error;
     return localRouteSheets(filters);
@@ -136,7 +137,8 @@ export async function getRouteSheets(filters: RouteSheetFilters = {}): Promise<R
 
 export async function getRouteSheetById(id: string): Promise<RouteSheet | null> {
   try {
-    return normalizeRouteSheet((await apiGet<RouteSheetResponse>(`/api/route-sheets/${encodeURIComponent(id)}`)).routeSheet);
+    const routeSheet = extractEntity<RouteSheet>(await apiGet<unknown>(`/api/route-sheets/${encodeURIComponent(id)}`), 'routeSheet');
+    return routeSheet ? normalizeRouteSheet(routeSheet) : null;
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return null;
     if (!isApiUnavailableError(error)) throw error;
@@ -171,7 +173,7 @@ export async function startShift(input: StartShiftInput): Promise<RouteSheet> {
   if (!getOfficerToken()) throw new Error('Сесія завершилась. Увійдіть повторно.');
   if (!isValidBadgeNumber(input.officer.badgeNumber)) throw new Error(BADGE_NUMBER_ERROR);
   try {
-    const response = await apiPost<RouteSheetResponse>('/api/route-sheets/start', {
+    const response = await apiPost<unknown>('/api/route-sheets/start', {
       crewNumber: input.crewNumber?.trim() || null,
       vehicleNumber: normalizeVehicleNumber(input.vehicleNumber),
       startOdometer: input.startOdometer,
@@ -180,7 +182,9 @@ export async function startShift(input: StartShiftInput): Promise<RouteSheet> {
       startPhotoId: input.startPhotoId,
       pilotComment: input.pilotComment,
     });
-    return normalizeRouteSheet(response.routeSheet);
+    const routeSheet = extractEntity<RouteSheet>(response, 'routeSheet');
+    if (!routeSheet) throw new Error('Не вдалося зберегти маршрутний лист. Некоректна відповідь сервера.');
+    return normalizeRouteSheet(routeSheet);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) throw new Error('Сесія завершилась. Увійдіть повторно.');
     if (!isApiUnavailableError(error)) throw error;
@@ -193,12 +197,14 @@ export async function finishShift(input: FinishShiftInput): Promise<RouteSheet> 
   if (!isValidBadgeNumber(input.badgeNumber)) throw new Error(BADGE_NUMBER_ERROR);
   try {
     const { badgeNumber: _badgeNumber, ...finishInput } = input;
-    const response = await apiPost<RouteSheetResponse>('/api/route-sheets/finish', {
+    const response = await apiPost<unknown>('/api/route-sheets/finish', {
       ...finishInput,
       crewNumber: input.crewNumber?.trim() || null,
       vehicleNumber: normalizeVehicleNumber(input.vehicleNumber),
     });
-    return normalizeRouteSheet(response.routeSheet);
+    const routeSheet = extractEntity<RouteSheet>(response, 'routeSheet');
+    if (!routeSheet) throw new Error('Не вдалося зберегти маршрутний лист. Некоректна відповідь сервера.');
+    return normalizeRouteSheet(routeSheet);
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) throw new Error('Сесія завершилась. Увійдіть повторно.');
     if (!isApiUnavailableError(error)) throw error;

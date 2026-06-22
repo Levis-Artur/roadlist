@@ -2,6 +2,7 @@ import type { CreateVehicleInput, UpdateVehicleInput, Vehicle, VehicleFilters } 
 import { normalizeVehicleNumber } from '../utils/vehicleNumber';
 import { apiDelete, apiGet, apiPatch, apiPost, isApiUnavailableError } from './apiClient';
 import { addAuditLog } from './auditService';
+import { extractEntity, extractList } from '../utils/apiResponse';
 
 const VEHICLE_STORAGE_KEY = 'patrol-vehicle-directory';
 const PILOT_DEPARTMENT = 'УПП у Волинській області';
@@ -16,7 +17,10 @@ function initialVehicles(): Vehicle[] {
 function localVehicles(): Vehicle[] {
   try {
     const stored = localStorage.getItem(VEHICLE_STORAGE_KEY);
-    if (stored) return JSON.parse(stored) as Vehicle[];
+    if (stored) {
+      const parsed = JSON.parse(stored) as unknown;
+      if (Array.isArray(parsed)) return parsed as Vehicle[];
+    }
   } catch { /* Initialize a clean fallback directory below. */ }
   const vehicles = initialVehicles();
   localStorage.setItem(VEHICLE_STORAGE_KEY, JSON.stringify(vehicles));
@@ -38,15 +42,19 @@ function filteredLocalVehicles(filters: VehicleFilters) {
 }
 
 export async function getVehicles(filters: VehicleFilters = {}): Promise<Vehicle[]> {
-  try { return (await apiGet<VehiclesResponse>(`/api/vehicles${queryString(filters)}`)).vehicles; }
+  try { return extractList<Vehicle>(await apiGet<unknown>(`/api/vehicles${queryString(filters)}`), 'vehicles'); }
   catch (error) { if (!isApiUnavailableError(error)) throw error; return filteredLocalVehicles(filters); }
 }
 export async function getPilotVehicles(): Promise<Vehicle[]> {
-  try { return (await apiGet<VehiclesResponse>('/api/vehicles/pilot')).vehicles; }
+  try { return extractList<Vehicle>(await apiGet<unknown>('/api/vehicles/pilot'), 'vehicles'); }
   catch (error) { if (!isApiUnavailableError(error)) throw error; return filteredLocalVehicles({ isActive: true, isPilotActive: true }); }
 }
 export async function createVehicle(input: CreateVehicleInput): Promise<Vehicle> {
-  try { return (await apiPost<VehicleResponse>('/api/vehicles', input)).vehicle; }
+  try {
+    const vehicle = extractEntity<Vehicle>(await apiPost<unknown>('/api/vehicles', input), 'vehicle');
+    if (!vehicle) throw new Error('Не вдалося зберегти автомобіль. Некоректна відповідь сервера.');
+    return vehicle;
+  }
   catch (error) {
     if (!isApiUnavailableError(error)) throw error;
     const vehicles = localVehicles();
@@ -61,7 +69,11 @@ export async function createVehicle(input: CreateVehicleInput): Promise<Vehicle>
   }
 }
 export async function updateVehicle(id: string, input: UpdateVehicleInput): Promise<Vehicle> {
-  try { return (await apiPatch<VehicleResponse>(`/api/vehicles/${id}`, input)).vehicle; }
+  try {
+    const vehicle = extractEntity<Vehicle>(await apiPatch<unknown>(`/api/vehicles/${id}`, input), 'vehicle');
+    if (!vehicle) throw new Error('Не вдалося зберегти автомобіль. Некоректна відповідь сервера.');
+    return vehicle;
+  }
   catch (error) {
     if (!isApiUnavailableError(error)) throw error;
     const vehicles = localVehicles();

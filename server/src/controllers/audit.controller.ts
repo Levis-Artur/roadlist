@@ -3,7 +3,8 @@ import { createAuditLog, listAuditLogs } from '../services/audit.service.js';
 
 export async function listAuditLogsController(_request: Request, response: Response, next: NextFunction) {
   try {
-    response.json({ success: true, auditLogs: await listAuditLogs() });
+    const auditLogs = await listAuditLogs();
+    response.json({ success: true, auditLogs: Array.isArray(auditLogs) ? auditLogs : [] });
   } catch (error) {
     next(error);
   }

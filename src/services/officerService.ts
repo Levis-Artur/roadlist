@@ -3,6 +3,7 @@ import type { CreateOfficerInput, Officer, OfficerFilters, UpdateOfficerInput } 
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost, isApiUnavailableError } from './apiClient';
 import { addAuditLog } from './auditService';
 import { BADGE_NUMBER_ERROR, isValidBadgeNumber } from '../utils/badgeNumber';
+import { extractEntity, extractList } from '../utils/apiResponse';
 
 interface VerifyOfficerResponse {
   success: boolean;
@@ -46,7 +47,9 @@ function localOfficers(): Officer[] {
   try {
     const stored = localStorage.getItem(OFFICER_STORAGE_KEY);
     if (stored) {
-      const officers = JSON.parse(stored) as Officer[];
+      const parsed = JSON.parse(stored) as unknown;
+      if (!Array.isArray(parsed)) throw new Error('Invalid local officer directory');
+      const officers = parsed as Officer[];
       const legacyTestBadges: Record<string, string> = { '000001': '0000001', '000002': '0000002', '000003': '0000003' };
       let migrated = false;
       const normalized = officers.map((officer) => {
@@ -93,14 +96,18 @@ async function verifyOfficerLocally(badgeNumber: string): Promise<Officer | null
 }
 
 export async function getOfficers(filters: OfficerFilters = {}): Promise<Officer[]> {
-  try { return (await apiGet<OfficersResponse>(`/api/officers${queryString(filters)}`)).officers; }
+  try { return extractList<Officer>(await apiGet<unknown>(`/api/officers${queryString(filters)}`), 'officers'); }
   catch (error) { if (!isApiUnavailableError(error)) throw error; return filteredLocalOfficers(filters); }
 }
 
 export async function createOfficer(input: CreateOfficerInput): Promise<Officer> {
   if (!isValidBadgeNumber(input.badgeNumber)) throw new Error(BADGE_NUMBER_ERROR);
   if (!PIN_PATTERN.test(input.pin)) throw new Error(PIN_ERROR);
-  try { return (await apiPost<OfficerResponse>('/api/officers', input)).officer; }
+  try {
+    const officer = extractEntity<Officer>(await apiPost<unknown>('/api/officers', input), 'officer');
+    if (!officer) throw new Error('Не вдалося зберегти патрульного. Некоректна відповідь сервера.');
+    return officer;
+  }
   catch (error) {
     if (!isApiUnavailableError(error)) throw error;
     const officers = localOfficers();
@@ -120,7 +127,11 @@ export async function createOfficer(input: CreateOfficerInput): Promise<Officer>
 export async function updateOfficer(id: string, input: UpdateOfficerInput): Promise<Officer> {
   if (input.badgeNumber !== undefined && !isValidBadgeNumber(input.badgeNumber)) throw new Error(BADGE_NUMBER_ERROR);
   if (input.pin !== undefined && input.pin !== '' && !PIN_PATTERN.test(input.pin)) throw new Error(PIN_ERROR);
-  try { return (await apiPatch<OfficerResponse>(`/api/officers/${id}`, input)).officer; }
+  try {
+    const officer = extractEntity<Officer>(await apiPatch<unknown>(`/api/officers/${id}`, input), 'officer');
+    if (!officer) throw new Error('Не вдалося зберегти патрульного. Некоректна відповідь сервера.');
+    return officer;
+  }
   catch (error) {
     if (!isApiUnavailableError(error)) throw error;
     const officers = localOfficers();

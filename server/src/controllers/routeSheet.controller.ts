@@ -31,7 +31,8 @@ export async function listRouteSheetsController(request: Request, response: Resp
     const filters = Object.fromEntries(
       Object.entries(request.query).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
     ) as RouteSheetFilters;
-    response.json({ success: true, routeSheets: await listRouteSheets(filters) });
+    const routeSheets = await listRouteSheets(filters);
+    response.json({ success: true, routeSheets: Array.isArray(routeSheets) ? routeSheets : [] });
   } catch (error) {
     next(error);
   }

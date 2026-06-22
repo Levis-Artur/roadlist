@@ -6,11 +6,11 @@ function metadata(request: Request) {
 }
 
 export async function listPilotVehiclesController(_request: Request, response: Response, next: NextFunction) {
-  try { response.json({ success: true, vehicles: await listPilotVehicles() }); } catch (error) { next(error); }
+  try { const vehicles = await listPilotVehicles(); response.json({ success: true, vehicles: Array.isArray(vehicles) ? vehicles : [] }); } catch (error) { next(error); }
 }
 
 export async function listVehiclesController(request: Request, response: Response, next: NextFunction) {
-  try { response.json({ success: true, vehicles: await listVehicles(request.query) }); } catch (error) { next(error); }
+  try { const vehicles = await listVehicles(request.query); response.json({ success: true, vehicles: Array.isArray(vehicles) ? vehicles : [] }); } catch (error) { next(error); }
 }
 
 export async function createVehicleController(request: Request, response: Response, next: NextFunction) {

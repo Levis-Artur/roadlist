@@ -29,7 +29,8 @@ export async function logoutOfficerController(request: Request, response: Respon
 
 export async function listOfficersController(request: Request, response: Response, next: NextFunction) {
   try {
-    response.json({ success: true, officers: await listOfficers(request.query) });
+    const officers = await listOfficers(request.query);
+    response.json({ success: true, officers: Array.isArray(officers) ? officers : [] });
   } catch (error) { next(error); }
 }
 

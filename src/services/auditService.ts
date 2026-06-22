@@ -1,5 +1,6 @@
 import type { AddAuditLogInput, AuditLog } from '../types';
 import { apiGet, apiPost, isApiUnavailableError } from './apiClient';
+import { extractList } from '../utils/apiResponse';
 
 const AUDIT_STORAGE_KEY = 'patrol-route-sheet-audit-logs';
 
@@ -11,7 +12,9 @@ interface AuditLogsResponse {
 function localAuditLogs(): AuditLog[] {
   try {
     const value = localStorage.getItem(AUDIT_STORAGE_KEY);
-    return value ? (JSON.parse(value) as AuditLog[]) : [];
+    if (!value) return [];
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed as AuditLog[] : [];
   } catch {
     return [];
   }
@@ -29,7 +32,7 @@ export async function addAuditLog(input: AddAuditLogInput): Promise<void> {
 
 export async function getAuditLogs(): Promise<AuditLog[]> {
   try {
-    return (await apiGet<AuditLogsResponse>('/api/audit-logs')).auditLogs;
+    return extractList<AuditLog>(await apiGet<unknown>('/api/audit-logs'), 'auditLogs');
   } catch (error) {
     if (!isApiUnavailableError(error)) throw error;
     return localAuditLogs();
