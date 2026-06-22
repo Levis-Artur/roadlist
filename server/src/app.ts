@@ -9,11 +9,12 @@ import { vehicleRouter } from './routes/vehicle.routes.js';
 import { pilotRouter } from './routes/pilot.routes.js';
 import { AppError, errorHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
+import { env } from './config/env.js';
 
 export const app = express();
 
 app.disable('x-powered-by');
-app.use(cors());
+app.use(cors({ origin: env.corsOrigin }));
 app.use(express.json({ limit: '1mb' }));
 app.use(requestLogger);
 

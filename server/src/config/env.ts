@@ -15,6 +15,7 @@ function numberFromEnv(value: string | undefined, fallback: number): number {
 }
 
 export const env = {
+  host: process.env.HOST ?? '0.0.0.0',
   port: numberFromEnv(process.env.PORT, 4000),
   databaseUrl: process.env.DATABASE_URL ?? '',
   uploadDir: path.resolve(process.cwd(), process.env.UPLOAD_DIR ?? './uploads'),
@@ -26,4 +27,5 @@ export const env = {
   pilotDepartment: process.env.PILOT_DEPARTMENT ?? 'УПП у Волинській області',
   pilotStartDate: process.env.PILOT_START_DATE ?? '2026-06-19',
   pilotEndDate: process.env.PILOT_END_DATE ?? '2026-06-26',
+  corsOrigin: process.env.CORS_ORIGIN ?? '*',
 };

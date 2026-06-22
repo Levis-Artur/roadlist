@@ -19,7 +19,11 @@ export function isApiUnavailableError(error: unknown): error is ApiUnavailableEr
 }
 
 export function getApiUrl(path: string): string {
-  return `${API_URL}${path.startsWith('/') ? path : `/${path}`}`;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  if (API_URL.endsWith('/api') && (normalizedPath === '/api' || normalizedPath.startsWith('/api/'))) {
+    return `${API_URL}${normalizedPath.slice(4)}`;
+  }
+  return `${API_URL}${normalizedPath}`;
 }
 
 async function request<T>(path: string, init: RequestInit): Promise<T> {

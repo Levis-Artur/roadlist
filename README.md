@@ -58,6 +58,10 @@ Service layer підключений до backend API; локальні реал
 
 Окремий Express + TypeScript + Prisma backend розміщений у [`server`](./server). Інструкції запуску, Docker Compose і приклади endpoint-ів наведені в [`server/README.md`](./server/README.md).
 
+## Розгортання на Debian
+
+Production-like запуск через Docker Compose (nginx + frontend, backend і PostgreSQL) описаний у [`DEPLOY_DEBIAN.md`](./DEPLOY_DEBIAN.md). Назовні публікується лише порт `80`; backend і база даних доступні тільки всередині Docker network.
+
 ## Підключення до backend
 
 Frontend використовує `VITE_API_URL` із `.env` і типово очікує API на `http://localhost:4000`. Приклад конфігурації наведено в [`.env.example`](./.env.example).
