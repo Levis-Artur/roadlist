@@ -153,6 +153,17 @@ docker compose -f docker-compose.prod.yml --env-file .env.production exec -T bac
 
 ## 11. Оновлення сервера після змін у GitHub
 
+Для швидкого оновлення використовуйте deployment-скрипт:
+
+```bash
+chmod +x deploy.sh
+./deploy.sh
+```
+
+Скрипт переходить у директорію проєкту, виконує `git pull`, перебудовує production-контейнери, застосовує Prisma migrations, показує статус контейнерів і останні 50 рядків backend-логів.
+
+Або виконайте ті самі кроки вручну:
+
 ```bash
 git pull
 docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
