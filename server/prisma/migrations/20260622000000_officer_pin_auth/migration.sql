@@ -1,0 +1,1 @@
+ALTER TABLE "Officer" ADD COLUMN "pinHash" TEXT;

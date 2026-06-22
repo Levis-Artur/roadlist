@@ -1,0 +1,108 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Officer {
+  id          String   @id @default(uuid())
+  badgeNumber String   @unique
+  fullName    String
+  department  String
+  pinHash     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Vehicle {
+  id                 String   @id @default(uuid())
+  plateNumber        String   @unique
+  displayPlateNumber String?
+  brand              String
+  model              String
+  department         String
+  isPilotActive      Boolean  @default(false)
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([department, isActive, isPilotActive])
+}
+
+model PilotOfficerAccess {
+  id          String   @id @default(uuid())
+  badgeNumber String   @unique
+  department  String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([department, isActive])
+}
+
+model RouteSheet {
+  id               String          @id @default(uuid())
+  badgeNumber      String
+  fullName         String
+  department       String
+  crewNumber       String?
+  vehicleNumber    String
+  startOdometer    Int
+  endOdometer      Int?
+  distanceKm       Int?
+  startPhotoId     String?
+  endPhotoId       String?
+  startOcrValue    Int?
+  endOcrValue      Int?
+  startManualEntry Boolean
+  endManualEntry   Boolean?
+  status           String
+  startedAt        DateTime
+  endedAt          DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  isPilot          Boolean         @default(false)
+  pilotDepartment  String?
+  pilotComment     String?
+  photos           OdometerPhoto[]
+
+  @@index([badgeNumber, status])
+  @@index([crewNumber, vehicleNumber, status])
+  @@index([createdAt])
+}
+
+model OdometerPhoto {
+  id           String      @id @default(uuid())
+  routeSheetId String?
+  routeSheet   RouteSheet? @relation(fields: [routeSheetId], references: [id], onDelete: SetNull)
+  type         String
+  filePath     String
+  originalName String?
+  mimeType     String
+  sizeBytes    Int
+  createdAt    DateTime    @default(now())
+  expiresAt    DateTime
+  deletedAt    DateTime?
+
+  @@index([routeSheetId])
+  @@index([expiresAt, deletedAt])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  action      String
+  entityType  String
+  entityId    String?
+  badgeNumber String?
+  details     String?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+}

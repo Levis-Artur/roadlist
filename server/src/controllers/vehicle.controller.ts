@@ -1,0 +1,29 @@
+import type { NextFunction, Request, Response } from 'express';
+import { createVehicle, deactivateVehicle, listPilotVehicles, listVehicles, updateVehicle } from '../services/vehicle.service.js';
+
+function metadata(request: Request) {
+  return { ipAddress: request.ip, userAgent: request.get('user-agent') };
+}
+
+export async function listPilotVehiclesController(_request: Request, response: Response, next: NextFunction) {
+  try { response.json({ success: true, vehicles: await listPilotVehicles() }); } catch (error) { next(error); }
+}
+
+export async function listVehiclesController(request: Request, response: Response, next: NextFunction) {
+  try { response.json({ success: true, vehicles: await listVehicles(request.query) }); } catch (error) { next(error); }
+}
+
+export async function createVehicleController(request: Request, response: Response, next: NextFunction) {
+  try { response.status(201).json({ success: true, vehicle: await createVehicle(request.body ?? {}, metadata(request)) }); } catch (error) { next(error); }
+}
+
+export async function updateVehicleController(request: Request, response: Response, next: NextFunction) {
+  try { response.json({ success: true, vehicle: await updateVehicle(request.params.id, request.body ?? {}, metadata(request)) }); } catch (error) { next(error); }
+}
+
+export async function deactivateVehicleController(request: Request, response: Response, next: NextFunction) {
+  try {
+    await deactivateVehicle(request.params.id, metadata(request));
+    response.json({ success: true, message: 'Автомобіль деактивовано' });
+  } catch (error) { next(error); }
+}

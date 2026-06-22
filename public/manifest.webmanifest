@@ -1,0 +1,18 @@
+{
+  "name": "Електронний маршрутний лист",
+  "short_name": "Маршрутний лист",
+  "description": "Маршрутні листи патрульних екіпажів",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3f6f9",
+  "theme_color": "#12395b",
+  "lang": "uk",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

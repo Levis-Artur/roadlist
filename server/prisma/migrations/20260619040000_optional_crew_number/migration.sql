@@ -1,0 +1,1 @@
+ALTER TABLE "RouteSheet" ALTER COLUMN "crewNumber" DROP NOT NULL;

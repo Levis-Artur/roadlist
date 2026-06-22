@@ -1,0 +1,46 @@
+import type { NextFunction, Request, Response } from 'express';
+import { finishShift, getRouteSheet, listRouteSheets, startShift } from '../services/routeSheet.service.js';
+import type { FinishShiftInput, RouteSheetFilters, StartShiftInput } from '../types/index.js';
+
+function metadata(request: Request) {
+  return { ipAddress: request.ip, userAgent: request.get('user-agent') };
+}
+
+export async function startShiftController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const input = { ...(request.body ?? {}), badgeNumber: request.officer!.badgeNumber } as StartShiftInput;
+    const routeSheet = await startShift(input, metadata(request));
+    response.status(201).json({ success: true, routeSheet });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function finishShiftController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const input = { ...(request.body ?? {}), badgeNumber: request.officer!.badgeNumber } as FinishShiftInput;
+    const routeSheet = await finishShift(input, metadata(request));
+    response.json({ success: true, routeSheet });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function listRouteSheetsController(request: Request, response: Response, next: NextFunction) {
+  try {
+    const filters = Object.fromEntries(
+      Object.entries(request.query).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+    ) as RouteSheetFilters;
+    response.json({ success: true, routeSheets: await listRouteSheets(filters) });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function getRouteSheetController(request: Request, response: Response, next: NextFunction) {
+  try {
+    response.json({ success: true, routeSheet: await getRouteSheet(request.params.id) });
+  } catch (error) {
+    next(error);
+  }
+}

@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: route_sheet_db
+      POSTGRES_USER: route_sheet_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CHANGE_ME_STRONG_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - route_sheet_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U route_sheet_user -d route_sheet_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  route_sheet_postgres_data:

@@ -1,0 +1,50 @@
+# dependencies
+node_modules/
+server/node_modules/
+
+# builds
+dist/
+build/
+server/dist/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+# env files
+.env
+.env.local
+.env.production
+.env.development
+server/.env
+server/.env.local
+server/.env.production
+server/.env.development
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
+
+# database local files
+*.db
+*.sqlite
+*.sqlite3
+
+# uploads / user files
+server/uploads/*
+!server/uploads/.gitkeep
+
+# docker / temp / cache
+.tmp/
+temp/
+.cache/
+
+# coverage
+coverage/
