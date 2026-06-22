@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Службова емблема МВС</title>
+  <path fill="#f5f8fc" stroke="#9fc3e8" stroke-width="2" d="M32 3 39 14l13-2-2 13 11 7-11 7 2 13-13-2-7 11-7-11-13 2 2-13L3 32l11-7-2-13 13 2Z"/>
+  <circle cx="32" cy="32" r="17" fill="#123b67" stroke="#2e6da4" stroke-width="2"/>
+  <path fill="#f5c542" d="M32 17c2.5 5.2 6.2 8.4 11 10.5-2 9.1-5.7 14.4-11 18-5.3-3.6-9-8.9-11-18 4.8-2.1 8.5-5.3 11-10.5Z"/>
+  <path fill="#123b67" d="M32 22.5 35 29h6l-4.8 3.8 1.8 6.1-6-3.6-6 3.6 1.8-6.1L23 29h6Z"/>
+</svg>

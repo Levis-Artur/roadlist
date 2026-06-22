@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-route
 import { AdminRoute } from './pages/AdminRoute';
 import { PatrolPage } from './pages/PatrolPage';
 import { cleanupExpiredPhotos } from './services/photoService';
+import mvsBadge from './assets/mvs-badge.svg';
 
 function AppHeader() {
   const location = useLocation();
@@ -13,7 +14,7 @@ function AppHeader() {
       <header className="site-header">
         <div className="header-inner">
           <div className="brand-block">
-            <span className="brand-mark" aria-hidden="true">ПП</span>
+            <span className="brand-mark"><img src={mvsBadge} alt="Емблема МВС" /></span>
             <div><strong>Патрульна поліція</strong><span>Електронний маршрутний лист</span></div>
           </div>
           <div className="system-meta"><span>{isAdmin ? 'Роль: Адміністратор' : 'Роль: Патрульний'}</span><time>{currentDate}</time></div>
