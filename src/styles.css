@@ -58,7 +58,6 @@ button:disabled { opacity: .52; cursor: not-allowed; }
 .module-bar { min-height: 31px; padding: 6px max(12px, calc((100% - 1400px) / 2 + 12px)); display: flex; align-items: center; gap: 7px; background: var(--color-toolbar); border-bottom: 1px solid var(--color-border-strong); color: var(--color-muted); font-size: 12px; }
 .module-bar b { font-weight: 400; color: #8994a0; }
 .module-bar strong { color: var(--color-text); }
-.module-state { margin-left: auto; padding: 2px 7px; border: 1px solid #9b864f; background: #eee8d7; color: #655523; }
 .status-bar { min-height: 27px; margin-top: auto; padding: 5px max(10px, calc((100% - 1400px) / 2 + 10px)); display: flex; flex-wrap: wrap; gap: 6px 20px; background: var(--color-toolbar); border-top: 1px solid var(--color-border-strong); color: #44515e; font-size: 11px; }
 .status-bar span::before { content: "■"; margin-right: 6px; color: var(--color-success); font-size: 8px; }
 
@@ -73,7 +72,7 @@ h2 { margin: 0; font-size: 15px; }
 h3 { margin: 0; font-size: 14px; }
 p { line-height: 1.35; }
 
-.panel, .table-card, .empty-state, .pilot-overview, .pilot-report, .admin-login-card { border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--color-panel); box-shadow: var(--shadow-none); }
+.panel, .table-card, .empty-state, .admin-login-card { border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); background: var(--color-panel); box-shadow: var(--shadow-none); }
 .panel { padding: 10px; }
 .panel-heading, .section-heading, .officer-card-header, .registry-heading {
   min-height: 32px;
@@ -163,13 +162,6 @@ dd { margin: 0; padding: 7px 8px; font-weight: 600; overflow-wrap: anywhere; }
 .form-grid small { color: var(--color-muted); font-weight: 400; }
 .modal-actions { margin-top: 10px; padding-top: 8px; display: flex; gap: 6px; border-top: 1px solid var(--color-border); }
 .local-cleanup-note { margin: 0 0 8px; padding: 4px 7px; border: 1px solid var(--color-border); background: var(--color-panel-2); color: var(--color-muted); font-size: 11px; }
-.pilot-overview, .pilot-report { margin-bottom: 9px; padding: 9px; }
-.pilot-overview .registry-heading, .pilot-report .registry-heading { margin: -9px -9px 8px; }
-.pilot-info-grid, .pilot-report-grid { display: grid; grid-template-columns: 1fr; border: 1px solid var(--color-border); background: #fff; }
-.pilot-info-grid div, .pilot-report-grid article { min-height: 34px; display: grid; grid-template-columns: minmax(110px, 1fr) 1.3fr; align-items: center; border-top: 1px solid #c8d0d8; }
-.pilot-info-grid div:first-child, .pilot-report-grid article:first-child { border-top: 0; }
-.pilot-info-grid span, .pilot-report-grid span { height: 100%; padding: 8px; display: flex; align-items: center; background: var(--color-panel-2); border-right: 1px solid #c8d0d8; color: var(--color-muted); font-size: 12px; }
-.pilot-info-grid strong, .pilot-report-grid strong { padding: 7px 8px; font-size: 13px; }
 .stats-grid { margin-bottom: 8px; display: grid; grid-template-columns: 1fr; border: 1px solid var(--color-border-strong); background: var(--color-border); gap: 1px; }
 .stats-grid article { min-height: 37px; padding: 0; display: grid; grid-template-columns: 1fr auto; align-items: center; background: #fff; border: 0; }
 .stats-grid article:last-child { grid-column: auto; }
@@ -182,7 +174,6 @@ dd { margin: 0; padding: 7px 8px; font-weight: 600; overflow-wrap: anywhere; }
 .audit-section { margin-top: 10px; }
 .registry-heading { margin: 0 0 -1px; border: 1px solid var(--color-border-strong); }
 .registry-heading h2 { font-size: 14px; }
-.pilot-vehicle-table { margin-top: 8px; }
 .compact-empty { padding: 12px; text-align: left; }
 
 .table-card { overflow: hidden; }
@@ -234,12 +225,6 @@ figure img, .no-photo { width: 100%; min-height: 120px; max-height: 280px; borde
   .stats-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .stats-grid article { display: flex; flex-direction: column; align-items: stretch; }
   .stats-grid strong { border-left: 0; border-top: 1px solid var(--color-border); text-align: left; }
-  .pilot-info-grid { grid-template-columns: repeat(3, 1fr); }
-  .pilot-info-grid div { display: flex; flex-direction: column; align-items: stretch; }
-  .pilot-info-grid span { border-right: 0; border-bottom: 1px solid var(--color-border); }
-  .pilot-report-grid { grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--color-border); }
-  .pilot-report-grid article { display: flex; flex-direction: column; align-items: stretch; border-top: 0; }
-  .pilot-report-grid span { border-right: 0; border-bottom: 1px solid var(--color-border); }
   .detail-grid { grid-template-columns: repeat(2, 1fr); }
   .detail-grid div:nth-child(2) { border-top: 0; }
 }
@@ -247,7 +232,6 @@ figure img, .no-photo { width: 100%; min-height: 120px; max-height: 280px; borde
 @media (max-width: 599px) {
   .header-inner { padding-inline: 8px; }
   .brand-mark { display: none; }
-  .module-state { display: none; }
   .page { padding-inline: 6px; }
   .admin-actions button { flex: 1 1 calc(50% - 4px); }
   .action-grid button { width: 100%; }

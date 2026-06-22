@@ -4,8 +4,9 @@ import { VehicleDirectory } from '../components/VehicleDirectory';
 import { addAuditLog, clearAuditLogs, getAuditLogs } from '../services/auditService';
 import { clearOdometerPhotos, getOdometerPhoto } from '../services/photoService';
 import { clearRouteSheets, getRouteSheetById, getRouteSheets } from '../services/routeSheetService';
-import { getPilotStatus, getPilotVehicles } from '../services/pilotService';
-import type { AuditLog, PilotStatus, RouteSheet, RouteSheetStatus, Vehicle } from '../types';
+import { getOfficers } from '../services/officerService';
+import { getVehicles } from '../services/vehicleService';
+import type { AuditLog, Officer, RouteSheet, RouteSheetStatus, Vehicle } from '../types';
 import { findVehicleByNumber, formatVehicleLabel } from '../utils/vehicleDisplay';
 
 const statusLabels: Record<RouteSheetStatus, string> = {
@@ -55,31 +56,6 @@ function exportCsv(routeSheets: RouteSheet[]) {
   URL.revokeObjectURL(url);
 }
 
-function exportPilotCsv(routeSheets: RouteSheet[], vehicles: Vehicle[]) {
-  const headers = [
-    'Дата', 'ПІБ', 'Номер жетона', 'УПП', 'Номер екіпажу / підрозділу', 'Автомобіль',
-    'Початковий кілометраж', 'Кінцевий кілометраж', 'Пробіг', 'Статус',
-    'Ручне внесення початку', 'Ручне внесення кінця', 'Коментар', 'Час початку', 'Час завершення',
-  ];
-  const rows = routeSheets.map((item) => [
-    formatDate(item.createdAt, true), item.fullName, item.badgeNumber, item.department, item.crewNumber || '—',
-    displayVehicleFromList(vehicles, item.vehicleNumber),
-    item.startOdometer, item.endOdometer,
-    item.distanceKm, statusLabels[item.status], item.startManualEntry ? 'Так' : 'Ні',
-    item.endManualEntry === undefined ? '' : item.endManualEntry ? 'Так' : 'Ні', item.pilotComment,
-    formatDate(item.startedAt), item.endedAt ? formatDate(item.endedAt) : '',
-  ]);
-  const csv = `\uFEFF${[headers, ...rows].map((row) => row.map(csvCell).join(';')).join('\r\n')}`;
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'pilot-route-sheets-report.csv';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
 function DetailItem({ label, value }: { label: string; value: React.ReactNode }) {
   return <div><dt>{label}</dt><dd>{value ?? '—'}</dd></div>;
 }
@@ -106,7 +82,7 @@ function StoredPhoto({ photoId, alt }: { photoId?: string; alt: string }) {
 }
 
 export function AdminPage({ onLogout }: { onLogout: () => void }) {
-  const [section, setSection] = useState<'route_sheets' | 'officers' | 'vehicles' | 'pilot' | 'audit'>('route_sheets');
+  const [section, setSection] = useState<'route_sheets' | 'officers' | 'vehicles' | 'audit'>('route_sheets');
   const [routeSheets, setRouteSheets] = useState<RouteSheet[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [selected, setSelected] = useState<RouteSheet>();
@@ -114,26 +90,26 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
   const [statusFilter, setStatusFilter] = useState<'all' | RouteSheetStatus>('all');
   const [adminError, setAdminError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [pilotStatus, setPilotStatus] = useState<PilotStatus>();
-  const [pilotVehicles, setPilotVehicles] = useState<Vehicle[]>([]);
-  const [pilotOnly, setPilotOnly] = useState(false);
+  const [officers, setOfficers] = useState<Officer[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
 
   async function refreshData() {
     setLoading(true);
     setAdminError('');
     try {
-      const [sheets, logs, pilot, vehicles] = await Promise.all([
-        getRouteSheets(), getAuditLogs(), getPilotStatus(), getPilotVehicles(),
+      const [sheets, logs, officerItems, vehicleItems] = await Promise.all([
+        getRouteSheets(), getAuditLogs(), getOfficers(), getVehicles(),
       ]);
       setRouteSheets(Array.isArray(sheets) ? sheets : []);
       setAuditLogs(Array.isArray(logs) ? logs : []);
-      setPilotStatus(pilot);
-      setPilotVehicles(Array.isArray(vehicles) ? vehicles : []);
+      setOfficers(Array.isArray(officerItems) ? officerItems : []);
+      setVehicles(Array.isArray(vehicleItems) ? vehicleItems : []);
     } catch (caught) {
       console.error('[AdminPage] data load failed', caught);
       setRouteSheets([]);
       setAuditLogs([]);
-      setPilotVehicles([]);
+      setOfficers([]);
+      setVehicles([]);
       setAdminError('Не вдалося завантажити дані. Перевірте з’єднання з сервером.');
     } finally {
       setLoading(false);
@@ -146,12 +122,11 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
     const normalizedQuery = query.trim().toLocaleLowerCase('uk-UA');
     return routeSheets.filter((item) => {
       const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
-      const matchesPilot = !pilotOnly || item.isPilot === true;
       const matchesQuery = !normalizedQuery || [item.fullName, item.badgeNumber, item.vehicleNumber]
         .some((value) => value.toLocaleLowerCase('uk-UA').includes(normalizedQuery));
-      return matchesStatus && matchesPilot && matchesQuery;
+      return matchesStatus && matchesQuery;
     });
-  }, [pilotOnly, query, routeSheets, statusFilter]);
+  }, [query, routeSheets, statusFilter]);
 
   const stats = useMemo(() => ({
     total: routeSheets.length,
@@ -159,41 +134,9 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
     completed: routeSheets.filter((item) => item.status === 'completed').length,
     needsReview: routeSheets.filter((item) => item.status === 'needs_review').length,
     distance: routeSheets.reduce((sum, item) => sum + (item.distanceKm ?? 0), 0),
-  }), [routeSheets]);
-
-  const pilotReport = useMemo(() => {
-    const sheets = routeSheets.filter((item) => item.isPilot);
-    const completed = sheets.filter((item) => item.status !== 'active');
-    const distance = sheets.reduce((sum, item) => sum + (item.distanceKm ?? 0), 0);
-    const manualEntries = sheets.reduce(
-      (sum, item) => sum + (item.startManualEntry ? 1 : 0) + (item.endManualEntry ? 1 : 0),
-      0,
-    );
-    const totalEntries = sheets.reduce((sum, item) => sum + 1 + (item.endOdometer === undefined ? 0 : 1), 0);
-    const vehicleStats = pilotVehicles.map((vehicle) => {
-      const vehicleSheets = sheets.filter((item) => Boolean(findVehicleByNumber([vehicle], item.vehicleNumber)));
-      const latest = [...vehicleSheets].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
-      return {
-        ...vehicle,
-        shifts: vehicleSheets.length,
-        distance: vehicleSheets.reduce((sum, item) => sum + (item.distanceKm ?? 0), 0),
-        lastOdometer: latest ? latest.endOdometer ?? latest.startOdometer : undefined,
-      };
-    });
-    return {
-      sheets,
-      total: sheets.length,
-      completed: completed.length,
-      active: sheets.filter((item) => item.status === 'active').length,
-      distance,
-      averageDistance: completed.length ? Math.round(distance / completed.length) : 0,
-      manualEntries,
-      manualPercent: totalEntries ? Math.round((manualEntries / totalEntries) * 100) : 0,
-      needsReview: sheets.filter((item) => item.status === 'needs_review').length,
-      comments: sheets.filter((item) => Boolean(item.pilotComment?.trim())).length,
-      vehicleStats,
-    };
-  }, [pilotVehicles, routeSheets]);
+    activeOfficers: officers.filter((item) => item.isActive !== false).length,
+    activeVehicles: vehicles.filter((item) => item.isActive).length,
+  }), [officers, routeSheets, vehicles]);
 
   async function clearData() {
     if (!window.confirm('Очистити локальні тестові дані цього браузера?')) return;
@@ -225,14 +168,8 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
     }
   }
 
-  async function exportPilotReport() {
-    exportPilotCsv(pilotReport.sheets, pilotVehicles);
-    await addAuditLog({ action: 'Створено пілотний CSV-звіт', entityType: 'admin', details: `Записів: ${pilotReport.total}` }).catch(() => undefined);
-    setAuditLogs(await getAuditLogs().catch(() => auditLogs));
-  }
-
   function displayVehicle(vehicleNumber: string): string {
-    return displayVehicleFromList(pilotVehicles, vehicleNumber);
+    return displayVehicleFromList(vehicles, vehicleNumber);
   }
 
   return (
@@ -240,9 +177,8 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
       <section className="admin-header">
         <div><span className="eyebrow">Модуль адміністрування</span><h1>Адміністративна панель</h1><p>Реєстр маршрутних листів та службових подій</p></div>
         <div className="admin-actions">
-          {(section === 'route_sheets' || section === 'pilot' || section === 'audit') && <button type="button" className="secondary compact" onClick={() => void refreshData()} disabled={loading}>Оновити</button>}
+          {(section === 'route_sheets' || section === 'audit') && <button type="button" className="secondary compact" onClick={() => void refreshData()} disabled={loading}>Оновити</button>}
           {section === 'route_sheets' && <button type="button" className="secondary compact" onClick={() => exportCsv(routeSheets)} disabled={!routeSheets.length}>Експорт CSV</button>}
-          {section === 'pilot' && <button type="button" className="secondary compact" onClick={() => void exportPilotReport()} disabled={!pilotReport.total}>Експорт пілотного звіту CSV</button>}
           {section === 'route_sheets' && <button type="button" className="danger-outline compact" onClick={() => void clearData()}>Очистити локальні тестові дані</button>}
           <button type="button" className="secondary compact" onClick={onLogout}>Вийти</button>
         </div>
@@ -252,7 +188,6 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
         <button className={section === 'route_sheets' ? 'active' : ''} onClick={() => setSection('route_sheets')}>Маршрутні листи</button>
         <button className={section === 'officers' ? 'active' : ''} onClick={() => setSection('officers')}>Користувачі</button>
         <button className={section === 'vehicles' ? 'active' : ''} onClick={() => setSection('vehicles')}>Автомобілі</button>
-        <button className={section === 'pilot' ? 'active' : ''} onClick={() => setSection('pilot')}>Пілотне тестування</button>
         <button className={section === 'audit' ? 'active' : ''} onClick={() => setSection('audit')}>Журнал дій</button>
       </nav>
 
@@ -263,24 +198,14 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
       {section === 'officers' && <OfficerDirectory />}
       {section === 'vehicles' && <VehicleDirectory />}
 
-      <section className="pilot-overview" aria-label="Пілотне тестування" hidden={section !== 'pilot'}>
-        <div className="registry-heading"><span className="eyebrow">Контрольований запуск</span><h2>Пілотне тестування</h2></div>
-        <div className="pilot-info-grid">
-          <div><span>Статус</span><strong className={`status ${pilotStatus?.active ? 'completed' : 'needs_review'}`}>{pilotStatus?.active ? 'Активний' : 'Неактивний'}</strong></div>
-          <div><span>УПП</span><strong>{pilotStatus?.department ?? '—'}</strong></div>
-          <div><span>Початок</span><strong>{pilotStatus ? formatDate(pilotStatus.startDate, true) : '—'}</strong></div>
-          <div><span>Завершення</span><strong>{pilotStatus ? formatDate(pilotStatus.endDate, true) : '—'}</strong></div>
-          <div><span>Автомобілі</span><strong>{pilotStatus?.vehicleCount ?? 0}</strong></div>
-          <div><span>Патрульні</span><strong>{pilotStatus?.officerCount ?? 0}</strong></div>
-        </div>
-      </section>
-
       <section className="stats-grid" aria-label="Статистика маршрутних листів" hidden={section !== 'route_sheets'}>
         <article><span>Всього листів</span><strong>{stats.total}</strong></article>
         <article><span>Активні зміни</span><strong>{stats.active}</strong></article>
         <article><span>Завершені</span><strong>{stats.completed}</strong></article>
         <article className="warning-stat"><span>Потребують перевірки</span><strong>{stats.needsReview}</strong></article>
         <article><span>Сумарний пробіг</span><strong>{stats.distance.toLocaleString('uk-UA')} <small>км</small></strong></article>
+        <article><span>Активні патрульні</span><strong>{stats.activeOfficers}</strong></article>
+        <article><span>Активні автомобілі</span><strong>{stats.activeVehicles}</strong></article>
       </section>
 
       <section className="admin-filters" aria-label="Фільтри маршрутних листів" hidden={section !== 'route_sheets'}>
@@ -293,7 +218,6 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
             <option value="completed">Завершені</option><option value="needs_review">Потребують перевірки</option>
           </select>
         </label>
-        <label className="checkbox-filter"><input type="checkbox" checked={pilotOnly} onChange={(event) => setPilotOnly(event.target.checked)} />Показати тільки пілотні записи</label>
       </section>
 
       {section === 'route_sheets' && (loading ? (
@@ -328,26 +252,6 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
         </section>
       ))}
 
-      <section className="pilot-report" aria-label="Звіт пілоту за тиждень" hidden={section !== 'pilot'}>
-        <div className="registry-heading"><span className="eyebrow">Аналітика</span><h2>Звіт пілоту за тиждень</h2></div>
-        <div className="pilot-report-grid">
-          <article><span>Маршрутні листи</span><strong>{pilotReport.total}</strong></article>
-          <article><span>Завершені зміни</span><strong>{pilotReport.completed}</strong></article>
-          <article><span>Активні зміни</span><strong>{pilotReport.active}</strong></article>
-          <article><span>Сумарний пробіг</span><strong>{pilotReport.distance} км</strong></article>
-          <article><span>Середній пробіг</span><strong>{pilotReport.averageDistance} км</strong></article>
-          <article><span>Ручні внесення</span><strong>{pilotReport.manualEntries} ({pilotReport.manualPercent}%)</strong></article>
-          <article><span>Потребують перевірки</span><strong>{pilotReport.needsReview}</strong></article>
-          <article><span>Коментарі</span><strong>{pilotReport.comments}</strong></article>
-        </div>
-        <div className="table-card pilot-vehicle-table"><div className="table-scroll"><table>
-          <thead><tr><th>Автомобіль</th><th>Марка / модель</th><th>Кількість змін</th><th>Сумарний пробіг</th><th>Останній одометр</th></tr></thead>
-          <tbody>{pilotReport.vehicleStats.map((vehicle) => (
-            <tr key={vehicle.id}><td>{vehicle.displayPlateNumber || vehicle.plateNumber}</td><td>{vehicle.brand} {vehicle.model}</td><td>{vehicle.shifts}</td><td>{vehicle.distance} км</td><td>{vehicle.lastOdometer ?? '—'}</td></tr>
-          ))}</tbody>
-        </table></div></div>
-      </section>
-
       <section className="audit-section" hidden={section !== 'audit'}>
         <div className="registry-heading"><span className="eyebrow">Системний реєстр</span><h2>Журнал подій</h2></div>
         {!auditLogs.length ? (
@@ -380,8 +284,6 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
               <DetailItem label="Ручне внесення на початку" value={selected.startManualEntry ? 'Так' : 'Ні'} />
               <DetailItem label="Ручне внесення в кінці" value={selected.endManualEntry === undefined ? '—' : selected.endManualEntry ? 'Так' : 'Ні'} />
               <DetailItem label="Статус" value={<span className={`status ${selected.status}`}>{statusLabels[selected.status]}</span>} />
-              <DetailItem label="Пілотний запис" value={selected.isPilot ? 'Так' : 'Ні'} />
-              <DetailItem label="Коментар" value={selected.pilotComment ?? '—'} />
             </dl>
             <div className="photo-grid detail-photos">
               <figure><figcaption>Фото на початку зміни</figcaption><StoredPhoto photoId={selected.startPhotoId} alt="Одометр на початку зміни" /></figure>

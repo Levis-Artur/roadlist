@@ -30,10 +30,6 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-12h}
       UPLOAD_DIR: /app/uploads
-      PILOT_MODE: ${PILOT_MODE:-true}
-      PILOT_DEPARTMENT: ${PILOT_DEPARTMENT}
-      PILOT_START_DATE: ${PILOT_START_DATE}
-      PILOT_END_DATE: ${PILOT_END_DATE}
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
     volumes:
       - backend_uploads:/app/uploads

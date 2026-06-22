@@ -40,15 +40,6 @@ export async function verifyOfficer(badgeNumber: string, metadata: RequestMetada
     where: { badgeNumber: normalizedBadge, isActive: true },
     select: { badgeNumber: true, fullName: true, department: true },
   });
-  if (officer && env.pilotMode) {
-    const pilotAccess = await prisma.pilotOfficerAccess.findFirst({
-      where: { badgeNumber: normalizedBadge, department: env.pilotDepartment, isActive: true },
-    });
-    if (!pilotAccess) {
-      await createAuditLog({ action: 'Відмовлено у доступі до пілоту', entityType: 'officer', badgeNumber: normalizedBadge, ...metadata });
-      throw new AppError('Цей працівник не включений до пілотного тестування.', 403);
-    }
-  }
   await createAuditLog({
     action: officer ? 'Перевірка жетона успішна' : 'Жетон не знайдено', entityType: 'officer',
     badgeNumber: normalizedBadge, details: officer?.fullName, ...metadata,
@@ -71,14 +62,7 @@ export async function listOfficers(filters: Record<string, unknown>) {
     },
     orderBy: [{ isActive: 'desc' }, { fullName: 'asc' }],
   });
-  const accesses = await prisma.pilotOfficerAccess.findMany({
-    where: { badgeNumber: { in: officers.map((officer) => officer.badgeNumber) } },
-  });
-  const accessMap = new Map(accesses.map((access) => [access.badgeNumber, access.isActive]));
-  const pilotFilter = filters.isPilotAllowed === 'true' ? true : filters.isPilotAllowed === 'false' ? false : undefined;
-  return officers
-    .map((officer) => ({ ...publicOfficer(officer), isPilotAllowed: accessMap.get(officer.badgeNumber) ?? false }))
-    .filter((officer) => pilotFilter === undefined || officer.isPilotAllowed === pilotFilter);
+  return officers.map(publicOfficer);
 }
 
 export async function createOfficer(input: Record<string, unknown>, metadata: RequestMetadata = {}) {
@@ -88,19 +72,11 @@ export async function createOfficer(input: Record<string, unknown>, metadata: Re
   const pin = validatePin(input.pin);
   const pinHash = await bcrypt.hash(pin, 10);
   const isActive = input.isActive !== false;
-  const isPilotAllowed = input.isPilotAllowed === true;
   try {
-    const officer = await prisma.$transaction(async (transaction) => {
-      const created = await transaction.officer.create({ data: { badgeNumber, fullName, department, pinHash, isActive } });
-      if (isPilotAllowed) {
-        await transaction.pilotOfficerAccess.create({ data: { badgeNumber, department, isActive: true } });
-      }
-      return created;
-    });
+    const officer = await prisma.officer.create({ data: { badgeNumber, fullName, department, pinHash, isActive } });
     await createAuditLog({ action: 'Створено патрульного', entityType: 'officer', entityId: officer.id, badgeNumber, details: fullName, ...metadata });
     await createAuditLog({ action: 'Адміністратор встановив PIN', entityType: 'officer', entityId: officer.id, badgeNumber, details: fullName, ...metadata });
-    if (isPilotAllowed) await createAuditLog({ action: 'Змінено доступ до пілоту', entityType: 'officer', entityId: officer.id, badgeNumber, details: 'Доступ увімкнено', ...metadata });
-    return { ...publicOfficer(officer), isPilotAllowed };
+    return publicOfficer(officer);
   } catch (error) { uniqueOfficerError(error); }
 }
 
@@ -110,36 +86,22 @@ export async function updateOfficer(id: string, input: Record<string, unknown>, 
   const badgeNumber = input.badgeNumber === undefined ? current.badgeNumber : validateBadgeNumber(input.badgeNumber);
   const fullName = input.fullName === undefined ? current.fullName : required(input.fullName, 'ПІБ обов’язкове.');
   const department = input.department === undefined ? current.department : required(input.department, 'УПП обов’язкове.');
-  const existingAccess = await prisma.pilotOfficerAccess.findUnique({ where: { badgeNumber: current.badgeNumber } });
-  const isPilotAllowed = input.isPilotAllowed === undefined ? existingAccess?.isActive ?? false : input.isPilotAllowed === true;
   const pinHash = input.pin === undefined || input.pin === '' ? undefined : await bcrypt.hash(validatePin(input.pin), 10);
   try {
-    const officer = await prisma.$transaction(async (transaction) => {
-      const updated = await transaction.officer.update({
-        where: { id },
-        data: { badgeNumber, fullName, department, pinHash, isActive: input.isActive === undefined ? undefined : Boolean(input.isActive) },
-      });
-      if (existingAccess) {
-        await transaction.pilotOfficerAccess.update({ where: { id: existingAccess.id }, data: { badgeNumber, department, isActive: isPilotAllowed } });
-      } else if (isPilotAllowed) {
-        await transaction.pilotOfficerAccess.create({ data: { badgeNumber, department, isActive: true } });
-      }
-      return updated;
+    const officer = await prisma.officer.update({
+      where: { id },
+      data: { badgeNumber, fullName, department, pinHash, isActive: input.isActive === undefined ? undefined : Boolean(input.isActive) },
     });
     await createAuditLog({ action: 'Оновлено патрульного', entityType: 'officer', entityId: id, badgeNumber, details: fullName, ...metadata });
     if (pinHash) await createAuditLog({ action: 'Адміністратор змінив PIN', entityType: 'officer', entityId: id, badgeNumber, details: fullName, ...metadata });
-    if (input.isPilotAllowed !== undefined) await createAuditLog({ action: 'Змінено доступ до пілоту', entityType: 'officer', entityId: id, badgeNumber, details: isPilotAllowed ? 'Доступ увімкнено' : 'Доступ вимкнено', ...metadata });
-    return { ...publicOfficer(officer), isPilotAllowed };
+    return publicOfficer(officer);
   } catch (error) { uniqueOfficerError(error); }
 }
 
 export async function deactivateOfficer(id: string, metadata: RequestMetadata = {}) {
   const current = await prisma.officer.findUnique({ where: { id } });
   if (!current) throw new AppError('Патрульного не знайдено.', 404);
-  await prisma.$transaction([
-    prisma.officer.update({ where: { id }, data: { isActive: false } }),
-    prisma.pilotOfficerAccess.updateMany({ where: { badgeNumber: current.badgeNumber }, data: { isActive: false } }),
-  ]);
+  await prisma.officer.update({ where: { id }, data: { isActive: false } });
   await createAuditLog({ action: 'Деактивовано патрульного', entityType: 'officer', entityId: id, badgeNumber: current.badgeNumber, details: current.fullName, ...metadata });
 }
 
@@ -167,15 +129,6 @@ export async function loginOfficer(badgeValue: unknown, pinValue: unknown, metad
   if (!officer.isActive) {
     await createAuditLog({ action: 'Невдала спроба входу патрульного', entityType: 'officer', entityId: officer.id, badgeNumber, details: 'Обліковий запис неактивний', ...metadata });
     throw new AppError('Обліковий запис патрульного неактивний', 403);
-  }
-  if (env.pilotMode) {
-    const pilotAccess = await prisma.pilotOfficerAccess.findFirst({
-      where: { badgeNumber, department: env.pilotDepartment, isActive: true },
-    });
-    if (!pilotAccess) {
-      await createAuditLog({ action: 'Невдала спроба входу патрульного', entityType: 'officer', entityId: officer.id, badgeNumber, details: 'Немає доступу до пілоту', ...metadata });
-      throw new AppError('Цей працівник не включений до пілотного тестування', 403);
-    }
   }
   if (!officer.pinHash || !await bcrypt.compare(pin, officer.pinHash)) {
     await createAuditLog({ action: 'Невдала спроба входу патрульного', entityType: 'officer', entityId: officer.id, badgeNumber, details: 'Невірні облікові дані', ...metadata });

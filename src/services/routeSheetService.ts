@@ -29,8 +29,6 @@ function normalizeRouteSheet(routeSheet: RouteSheet): RouteSheet {
     endOcrValue: routeSheet.endOcrValue ?? undefined,
     endManualEntry: routeSheet.endManualEntry ?? undefined,
     endedAt: routeSheet.endedAt ?? undefined,
-    pilotDepartment: routeSheet.pilotDepartment ?? undefined,
-    pilotComment: routeSheet.pilotComment ?? undefined,
   };
 }
 
@@ -38,10 +36,9 @@ function localRouteSheets(filters: RouteSheetFilters = {}): RouteSheet[] {
   const query = filters.search?.trim().toLocaleLowerCase('uk-UA');
   return routeSheetStorage.getAll().filter((item) => {
     const matchesStatus = !filters.status || item.status === filters.status;
-    const matchesPilot = filters.isPilot === undefined || Boolean(item.isPilot) === filters.isPilot;
     const matchesQuery = !query || [item.fullName, item.badgeNumber, item.vehicleNumber]
       .some((value) => value.toLocaleLowerCase('uk-UA').includes(query));
-    return matchesStatus && matchesPilot && matchesQuery;
+    return matchesStatus && matchesQuery;
   });
 }
 
@@ -79,14 +76,10 @@ async function startShiftLocally(input: StartShiftInput): Promise<RouteSheet> {
     startedAt: now,
     createdAt: now,
     updatedAt: now,
-    isPilot: true,
-    pilotDepartment: 'УПП у Волинській області',
-    pilotComment: input.pilotComment?.trim() ? `Початок: ${input.pilotComment.trim()}` : undefined,
   };
   routeSheetStorage.add(routeSheet);
-  await localAudit('Пілотна зміна розпочата', routeSheet);
+  await localAudit('Зміну розпочато', routeSheet);
   await localAudit('Автомобіль вибрано', routeSheet, routeSheet.vehicleNumber);
-  if (routeSheet.pilotComment) await localAudit('Додано коментар пілоту', routeSheet, routeSheet.pilotComment);
   return routeSheet;
 }
 
@@ -110,14 +103,9 @@ async function finishShiftLocally(input: FinishShiftInput): Promise<RouteSheet> 
     status: distanceKm > 400 ? 'needs_review' : 'completed',
     endedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    pilotComment: [
-      active.pilotComment,
-      input.pilotComment?.trim() ? `Завершення: ${input.pilotComment.trim()}` : undefined,
-    ].filter(Boolean).join('\n') || undefined,
   };
   routeSheetStorage.update(routeSheet);
-  await localAudit(routeSheet.status === 'needs_review' ? 'Пілотний запис потребує перевірки' : 'Пілотна зміна завершена', routeSheet, `Пробіг: ${distanceKm} км`);
-  if (input.pilotComment?.trim()) await localAudit('Додано коментар пілоту', routeSheet, `Завершення: ${input.pilotComment.trim()}`);
+  await localAudit(routeSheet.status === 'needs_review' ? 'Зміну завершено: потребує перевірки' : 'Зміну завершено', routeSheet, `Пробіг: ${distanceKm} км`);
   return routeSheet;
 }
 
@@ -125,7 +113,6 @@ export async function getRouteSheets(filters: RouteSheetFilters = {}): Promise<R
   const params = new URLSearchParams();
   if (filters.status) params.set('status', filters.status);
   if (filters.search) params.set('search', filters.search);
-  if (filters.isPilot !== undefined) params.set('isPilot', String(filters.isPilot));
   try {
     const query = params.size ? `?${params.toString()}` : '';
     return extractList<RouteSheet>(await apiGet<unknown>(`/api/route-sheets${query}`), 'routeSheets').map(normalizeRouteSheet);
@@ -180,7 +167,6 @@ export async function startShift(input: StartShiftInput): Promise<RouteSheet> {
       startOcrValue: input.startOcrValue,
       startManualEntry: input.startManualEntry,
       startPhotoId: input.startPhotoId,
-      pilotComment: input.pilotComment,
     });
     const routeSheet = extractEntity<RouteSheet>(response, 'routeSheet');
     if (!routeSheet) throw new Error('Не вдалося зберегти маршрутний лист. Некоректна відповідь сервера.');

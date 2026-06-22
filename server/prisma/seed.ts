@@ -9,22 +9,19 @@ const officers = [
   { badgeNumber: '0000003', fullName: 'Сидоренко Андрій Миколайович', department: 'УПП у Львівській області', pin: '3333' },
 ];
 
-const pilotDepartment = process.env.PILOT_DEPARTMENT ?? 'УПП у Волинській області';
-
 const vehicles = [
   {
     plateNumber: 'AA5200MH',
     displayPlateNumber: 'АА5200МН',
     brand: 'Hyundai',
     model: 'Sonata',
-    department: pilotDepartment,
+    department: 'УПП у Волинській області',
   },
 ];
 
 async function main() {
   const legacyBadges = ['000001', '000002', '000003'];
   await prisma.officer.updateMany({ where: { badgeNumber: { in: legacyBadges } }, data: { isActive: false } });
-  await prisma.pilotOfficerAccess.updateMany({ where: { badgeNumber: { in: legacyBadges } }, data: { isActive: false } });
   for (const officer of officers) {
     const { pin, ...officerData } = officer;
     const pinHash = await bcrypt.hash(pin, 10);
@@ -34,22 +31,14 @@ async function main() {
       create: { ...officerData, pinHash },
     });
   }
-  await prisma.vehicle.updateMany({ data: { isPilotActive: false } });
   for (const vehicle of vehicles) {
     await prisma.vehicle.upsert({
       where: { plateNumber: vehicle.plateNumber },
-      update: { ...vehicle, isPilotActive: true, isActive: true },
+      update: { ...vehicle, isActive: true },
       create: { ...vehicle, isActive: true },
     });
   }
-  for (const officer of officers) {
-    await prisma.pilotOfficerAccess.upsert({
-      where: { badgeNumber: officer.badgeNumber },
-      update: { department: pilotDepartment, isActive: true },
-      create: { badgeNumber: officer.badgeNumber, department: pilotDepartment },
-    });
-  }
-  console.log(`Seeded ${officers.length} officers, ${vehicles.length} vehicles and ${officers.length} pilot access records.`);
+  console.log(`Seeded ${officers.length} officers and ${vehicles.length} vehicles.`);
 }
 
 main()

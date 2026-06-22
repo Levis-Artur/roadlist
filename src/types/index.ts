@@ -4,14 +4,13 @@ export interface Officer {
   fullName: string;
   department: string;
   isActive?: boolean;
-  isPilotAllowed?: boolean;
   hasPin?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
 
-export interface OfficerFilters { search?: string; department?: string; isActive?: boolean; isPilotAllowed?: boolean }
-export interface CreateOfficerInput { badgeNumber: string; fullName: string; department: string; pin: string; isActive: boolean; isPilotAllowed: boolean }
+export interface OfficerFilters { search?: string; department?: string; isActive?: boolean }
+export interface CreateOfficerInput { badgeNumber: string; fullName: string; department: string; pin: string; isActive: boolean }
 export type UpdateOfficerInput = Partial<CreateOfficerInput>;
 
 export type RouteSheetStatus = 'active' | 'completed' | 'needs_review';
@@ -19,7 +18,6 @@ export type RouteSheetStatus = 'active' | 'completed' | 'needs_review';
 export interface RouteSheetFilters {
   status?: RouteSheetStatus;
   search?: string;
-  isPilot?: boolean;
 }
 
 export interface Vehicle {
@@ -29,26 +27,14 @@ export interface Vehicle {
   brand: string;
   model: string;
   department: string;
-  isPilotActive: boolean;
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
 
-export interface VehicleFilters { search?: string; department?: string; isActive?: boolean; isPilotActive?: boolean }
-export interface CreateVehicleInput { displayPlateNumber: string; brand: string; model: string; department: string; isActive: boolean; isPilotActive: boolean }
+export interface VehicleFilters { search?: string; department?: string; isActive?: boolean }
+export interface CreateVehicleInput { displayPlateNumber: string; brand: string; model: string; department: string; isActive: boolean }
 export type UpdateVehicleInput = Partial<CreateVehicleInput>;
-
-export interface PilotStatus {
-  enabled: boolean;
-  active: boolean;
-  ended: boolean;
-  department: string;
-  startDate: string;
-  endDate: string;
-  vehicleCount: number;
-  officerCount: number;
-}
 
 export interface RouteSheet {
   id: string;
@@ -71,9 +57,6 @@ export interface RouteSheet {
   endedAt?: string;
   createdAt: string;
   updatedAt: string;
-  isPilot?: boolean;
-  pilotDepartment?: string;
-  pilotComment?: string;
 }
 
 export interface OdometerResult {
@@ -91,7 +74,6 @@ export interface StartShiftInput {
   startPhotoId?: string;
   startOcrValue?: number;
   startManualEntry: boolean;
-  pilotComment?: string;
 }
 
 export interface FinishShiftInput {
@@ -102,7 +84,6 @@ export interface FinishShiftInput {
   endPhotoId?: string;
   endOcrValue?: number;
   endManualEntry: boolean;
-  pilotComment?: string;
 }
 
 export interface AuditLog {

@@ -19,13 +19,13 @@ function AppHeader() {
           <div className="system-meta"><span>{isAdmin ? 'Роль: Адміністратор' : 'Роль: Патрульний'}</span><time>{currentDate}</time></div>
         </div>
       </header>
-      <div className="module-bar"><span>Робочий стіл</span><b>/</b><strong>{isAdmin ? 'Адміністративна панель' : 'Маршрутний лист'}</strong><span className="module-state">Пілотний режим</span></div>
+      <div className="module-bar"><span>Робочий стіл</span><b>/</b><strong>{isAdmin ? 'Адміністративна панель' : 'Маршрутний лист'}</strong></div>
     </>
   );
 }
 
 function StatusBar() {
-  return <footer className="status-bar"><span>Система готова</span><span>API з локальним резервом</span><span>Пілотний режим активний</span></footer>;
+  return <footer className="status-bar"><span>Система готова</span><span>API з локальним резервом</span></footer>;
 }
 
 export default function App() {

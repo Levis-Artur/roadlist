@@ -39,7 +39,7 @@ cp .env.production.example .env.production
 nano .env.production
 ```
 
-Обов’язково змініть `POSTGRES_PASSWORD`, `ADMIN_PASSWORD` і `JWT_SECRET`. Перевірте `PILOT_DEPARTMENT`, `PILOT_START_DATE` та `PILOT_END_DATE`. Пароль у `DATABASE_URL` має точно збігатися з `POSTGRES_PASSWORD`; для URL використовуйте URL-encoded пароль, якщо він містить спеціальні символи.
+Обов’язково змініть `POSTGRES_PASSWORD`, `ADMIN_PASSWORD` і `JWT_SECRET`. Пароль у `DATABASE_URL` має точно збігатися з `POSTGRES_PASSWORD`; для URL використовуйте URL-encoded пароль, якщо він містить спеціальні символи.
 
 Реальний `.env.production` ігнорується Git і не повинен потрапляти в репозиторій. Не використовуйте `admin123` або значення `CHANGE_ME...` на сервері. Для JWT створіть довгий випадковий секрет, наприклад:
 

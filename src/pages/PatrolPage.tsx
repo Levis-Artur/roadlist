@@ -3,8 +3,8 @@ import { OfficerCard } from '../components/OfficerCard';
 import { OdometerInput } from '../components/OdometerInput';
 import { getAuthenticatedOfficer, loginOfficer, logoutOfficer } from '../services/officerService';
 import { finishShift, getActiveRouteSheetByOfficer, reportDuplicateShiftAttempt, startShift } from '../services/routeSheetService';
-import { getPilotStatus, getPilotVehicles } from '../services/pilotService';
-import type { OdometerResult, Officer, PilotStatus, RouteSheet, Vehicle } from '../types';
+import { getAvailableVehicles } from '../services/vehicleService';
+import type { OdometerResult, Officer, RouteSheet, Vehicle } from '../types';
 import { BADGE_NUMBER_ERROR, isValidBadgeNumber, sanitizeBadgeNumber } from '../utils/badgeNumber';
 import { findVehicleByNumber, formatVehicleLabel } from '../utils/vehicleDisplay';
 
@@ -22,8 +22,6 @@ export function PatrolPage() {
   const [activeSheet, setActiveSheet] = useState<RouteSheet>();
   const [checkingBadge, setCheckingBadge] = useState(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [pilotStatus, setPilotStatus] = useState<PilotStatus>();
-  const [pilotComment, setPilotComment] = useState('');
   const [loadingVehicles, setLoadingVehicles] = useState(false);
 
   async function checkBadge(event: React.FormEvent) {
@@ -70,12 +68,11 @@ export function PatrolPage() {
           return;
         }
       }
-      const [status, pilotVehicles] = await Promise.all([getPilotStatus(), getPilotVehicles()]);
-      setPilotStatus(status);
-      setVehicles(pilotVehicles);
-      if (status.enabled && pilotVehicles.length === 1) automaticVehicleNumber = pilotVehicles[0].plateNumber;
-      if (status.enabled && !pilotVehicles.length) {
-        setError('Немає доступних автомобілів для пілотного тестування. Зверніться до адміністратора.');
+      const availableVehicles = await getAvailableVehicles();
+      setVehicles(availableVehicles);
+      if (availableVehicles.length === 1) automaticVehicleNumber = availableVehicles[0].plateNumber;
+      if (!availableVehicles.length) {
+        setError('Немає активних автомобілів. Зверніться до адміністратора або додайте автомобіль в адмін-панелі.');
         setFlow('idle');
         return;
       }
@@ -91,7 +88,6 @@ export function PatrolPage() {
     setMessage('');
     setError('');
     setActiveSheet(undefined);
-    setPilotComment('');
   }
 
   async function reset() {
@@ -104,8 +100,6 @@ export function PatrolPage() {
     setVehicleNumber('');
     setActiveSheet(undefined);
     setVehicles([]);
-    setPilotStatus(undefined);
-    setPilotComment('');
   }
 
   function displayVehicle(vehicleNumberValue: string): string {
@@ -131,7 +125,6 @@ export function PatrolPage() {
           startPhotoId: result.photoId,
           startOcrValue: result.ocrValue,
           startManualEntry: result.manualEntry,
-          pilotComment,
         });
         setMessage(result.manualEntry
           ? 'Зміну розпочато. Початковий кілометраж збережено.'
@@ -145,7 +138,6 @@ export function PatrolPage() {
           endPhotoId: result.photoId,
           endOcrValue: result.ocrValue,
           endManualEntry: result.manualEntry,
-          pilotComment,
         });
         setMessage(`Зміну завершено. Пробіг за зміну: ${completed.distanceKm} км.${completed.status === 'needs_review' ? ' Запис потребує перевірки.' : ''}`);
       } else {
@@ -227,7 +219,6 @@ export function PatrolPage() {
           </section>
         )}
         {message && <p className="message success" role="status">{message}</p>}
-        {pilotStatus?.ended && <p className="message warning" role="status">Пілотне тестування завершено. Дані можна внести для перевірки сценарію.</p>}
 
         {officer && <><p className="message success" role="status">Працівник авторизований</p><OfficerCard officer={officer} /></>}
 
@@ -252,12 +243,12 @@ export function PatrolPage() {
                 ? 'Необов’язково. Заповнюється, якщо використовується у вашому підрозділі.'
                 : 'Якщо номер екіпажу не вносився на початку зміни, залиште поле порожнім.'}</small>
             </label>
-            {pilotStatus?.enabled && vehicles.length === 1 ? (
+            {vehicles.length === 1 ? (
               <div className="readonly-field">
                 <span>Службовий автомобіль</span>
                 <strong>{formatVehicleLabel(vehicles[0])}</strong>
               </div>
-            ) : pilotStatus?.enabled ? (
+            ) : (
               <label>
                 Службовий автомобіль
                 <select value={vehicleNumber} onChange={(event) => setVehicleNumber(event.target.value)}>
@@ -267,16 +258,7 @@ export function PatrolPage() {
                   ))}
                 </select>
               </label>
-            ) : (
-              <label>
-                Номер автомобіля / номерний знак
-                <input value={vehicleNumber} onChange={(event) => setVehicleNumber(event.target.value)} placeholder="Наприклад, АА 1234 АА" />
-              </label>
             )}
-            <label>
-              Коментар / проблема під час внесення даних <span className="optional-label">необов’язково</span>
-              <textarea value={pilotComment} onChange={(event) => setPilotComment(event.target.value)} rows={3} placeholder="Наприклад, OCR неправильно розпізнав цифру" />
-            </label>
             <OdometerInput
               key={flow}
               onSubmit={saveOdometer}

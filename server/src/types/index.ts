@@ -14,7 +14,6 @@ export interface StartShiftInput {
   startOcrValue?: number;
   startManualEntry: boolean;
   startPhotoId?: string;
-  pilotComment?: string;
 }
 
 export interface FinishShiftInput {
@@ -25,7 +24,6 @@ export interface FinishShiftInput {
   endOcrValue?: number;
   endManualEntry: boolean;
   endPhotoId?: string;
-  pilotComment?: string;
 }
 
 export interface RouteSheetFilters {
@@ -36,7 +34,6 @@ export interface RouteSheetFilters {
   from?: string;
   to?: string;
   search?: string;
-  isPilot?: string;
 }
 
 export interface AuditLogInput extends RequestMetadata {

@@ -1,6 +1,5 @@
 import { Prisma, type RouteSheet } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
-import { env } from '../config/env.js';
 import { AppError } from '../middleware/errorHandler.js';
 import type { FinishShiftInput, RequestMetadata, RouteSheetFilters, RouteSheetStatus, StartShiftInput } from '../types/index.js';
 import { normalizeVehicleNumber } from '../utils/normalizeVehicleNumber.js';
@@ -35,19 +34,8 @@ export async function startShift(input: StartShiftInput, metadata: RequestMetada
   }
   const officer = await prisma.officer.findFirst({ where: { badgeNumber, isActive: true } });
   if (!officer) throw new AppError('Працівника з таким номером жетона не знайдено', 404);
-  if (env.pilotMode) {
-    const pilotAccess = await prisma.pilotOfficerAccess.findFirst({
-      where: { badgeNumber, department: env.pilotDepartment, isActive: true },
-    });
-    if (!pilotAccess) throw new AppError('Цей працівник не включений до пілотного тестування.', 403);
-    const vehicle = await prisma.vehicle.findFirst({
-      where: { plateNumber: vehicleNumber, department: env.pilotDepartment, isActive: true, isPilotActive: true },
-    });
-    if (!vehicle) throw new AppError('Обраний автомобіль недоступний для пілотного тестування.', 400);
-  }
-  const pilotComment = typeof input.pilotComment === 'string' && input.pilotComment.trim()
-    ? `Початок: ${input.pilotComment.trim()}`
-    : undefined;
+  const vehicle = await prisma.vehicle.findFirst({ where: { plateNumber: vehicleNumber, isActive: true } });
+  if (!vehicle) throw new AppError('Обраний автомобіль неактивний або не знайдений.', 400);
   let routeSheet: RouteSheet;
   try {
     routeSheet = await prisma.routeSheet.create({
@@ -63,9 +51,6 @@ export async function startShift(input: StartShiftInput, metadata: RequestMetada
         startManualEntry: Boolean(input.startManualEntry),
         status: 'active',
         startedAt: new Date(),
-        isPilot: env.pilotMode,
-        pilotDepartment: env.pilotMode ? env.pilotDepartment : undefined,
-        pilotComment,
       },
     });
   } catch (error) {
@@ -78,13 +63,10 @@ export async function startShift(input: StartShiftInput, metadata: RequestMetada
     await prisma.odometerPhoto.updateMany({ where: { id: input.startPhotoId }, data: { routeSheetId: routeSheet.id, type: 'start' } });
   }
   await createAuditLog({
-    action: env.pilotMode ? 'Пілотна зміна розпочата' : 'Зміну розпочато', entityType: 'route_sheet', entityId: routeSheet.id, badgeNumber,
+    action: 'Зміну розпочато', entityType: 'route_sheet', entityId: routeSheet.id, badgeNumber,
     details: `Екіпаж/підрозділ: ${crewNumber ?? '—'}; авто: ${vehicleNumber}`, ...metadata,
   });
-  if (env.pilotMode) {
-    await createAuditLog({ action: 'Автомобіль вибрано', entityType: 'route_sheet', entityId: routeSheet.id, badgeNumber, details: vehicleNumber, ...metadata });
-    if (pilotComment) await createAuditLog({ action: 'Додано коментар пілоту', entityType: 'route_sheet', entityId: routeSheet.id, badgeNumber, details: pilotComment, ...metadata });
-  }
+  await createAuditLog({ action: 'Автомобіль вибрано', entityType: 'route_sheet', entityId: routeSheet.id, badgeNumber, details: vehicleNumber, ...metadata });
   return routeSheet;
 }
 
@@ -102,10 +84,6 @@ export async function finishShift(input: FinishShiftInput, metadata: RequestMeta
   }
   const distanceKm = endOdometer - active.startOdometer;
   const status: RouteSheetStatus = distanceKm > 400 ? 'needs_review' : 'completed';
-  const finishComment = typeof input.pilotComment === 'string' && input.pilotComment.trim()
-    ? `Завершення: ${input.pilotComment.trim()}`
-    : undefined;
-  const pilotComment = [active.pilotComment, finishComment].filter(Boolean).join('\n') || undefined;
   const routeSheet = await prisma.routeSheet.update({
     where: { id: active.id },
     data: {
@@ -116,22 +94,16 @@ export async function finishShift(input: FinishShiftInput, metadata: RequestMeta
       endManualEntry: Boolean(input.endManualEntry),
       status,
       endedAt: new Date(),
-      pilotComment,
     },
   });
   if (input.endPhotoId) {
     await prisma.odometerPhoto.updateMany({ where: { id: input.endPhotoId }, data: { routeSheetId: routeSheet.id, type: 'end' } });
   }
   await createAuditLog({
-    action: active.isPilot
-      ? status === 'needs_review' ? 'Пілотний запис потребує перевірки' : 'Пілотна зміна завершена'
-      : status === 'needs_review' ? 'Зміну завершено: потребує перевірки' : 'Зміну завершено',
+    action: status === 'needs_review' ? 'Зміну завершено: потребує перевірки' : 'Зміну завершено',
     entityType: 'route_sheet', entityId: routeSheet.id, badgeNumber,
     details: `Пробіг: ${distanceKm} км`, ...metadata,
   });
-  if (active.isPilot && finishComment) {
-    await createAuditLog({ action: 'Додано коментар пілоту', entityType: 'route_sheet', entityId: routeSheet.id, badgeNumber, details: finishComment, ...metadata });
-  }
   return routeSheet;
 }
 
@@ -148,8 +120,6 @@ export async function listRouteSheets(filters: RouteSheetFilters) {
       { vehicleNumber: { contains: normalizeVehicleNumber(filters.search) } },
     ];
   }
-  if (filters.isPilot === 'true') where.isPilot = true;
-  if (filters.isPilot === 'false') where.isPilot = false;
   if (filters.from || filters.to) {
     where.createdAt = {};
     if (filters.from) where.createdAt.gte = new Date(filters.from);

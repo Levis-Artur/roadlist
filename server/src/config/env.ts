@@ -23,9 +23,5 @@ export const env = {
   jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '12h',
   nodeEnv,
-  pilotMode: process.env.PILOT_MODE?.toLocaleLowerCase() === 'true',
-  pilotDepartment: process.env.PILOT_DEPARTMENT ?? 'УПП у Волинській області',
-  pilotStartDate: process.env.PILOT_START_DATE ?? '2026-06-19',
-  pilotEndDate: process.env.PILOT_END_DATE ?? '2026-06-26',
   corsOrigin: process.env.CORS_ORIGIN ?? '*',
 };

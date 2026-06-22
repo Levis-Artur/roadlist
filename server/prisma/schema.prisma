@@ -25,21 +25,9 @@ model Vehicle {
   brand              String
   model              String
   department         String
-  isPilotActive      Boolean  @default(false)
   isActive           Boolean  @default(true)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
-
-  @@index([department, isActive, isPilotActive])
-}
-
-model PilotOfficerAccess {
-  id          String   @id @default(uuid())
-  badgeNumber String   @unique
-  department  String
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
 
   @@index([department, isActive])
 }
@@ -65,9 +53,6 @@ model RouteSheet {
   endedAt          DateTime?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
-  isPilot          Boolean         @default(false)
-  pilotDepartment  String?
-  pilotComment     String?
   photos           OdometerPhoto[]
 
   @@index([badgeNumber, status])

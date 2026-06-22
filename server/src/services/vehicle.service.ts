@@ -1,6 +1,5 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
-import { env } from '../config/env.js';
 import { AppError } from '../middleware/errorHandler.js';
 import type { RequestMetadata } from '../types/index.js';
 import { normalizeVehicleNumber } from '../utils/normalizeVehicleNumber.js';
@@ -18,11 +17,11 @@ function uniqueVehicleError(error: unknown): never {
   throw error;
 }
 
-export async function listPilotVehicles() {
+export async function listAvailableVehicles() {
   return prisma.vehicle.findMany({
-    where: { isActive: true, isPilotActive: true, department: env.pilotDepartment },
+    where: { isActive: true },
     orderBy: [{ brand: 'asc' }, { model: 'asc' }],
-    select: { id: true, plateNumber: true, displayPlateNumber: true, brand: true, model: true, department: true, isPilotActive: true, isActive: true },
+    select: { id: true, plateNumber: true, displayPlateNumber: true, brand: true, model: true, department: true, isActive: true, createdAt: true, updatedAt: true },
   });
 }
 
@@ -30,12 +29,10 @@ export async function listVehicles(filters: Record<string, unknown> = {}) {
   const search = typeof filters.search === 'string' ? filters.search.trim() : '';
   const department = typeof filters.department === 'string' ? filters.department.trim() : '';
   const isActive = filters.isActive === 'true' ? true : filters.isActive === 'false' ? false : undefined;
-  const isPilotActive = filters.isPilotActive === 'true' ? true : filters.isPilotActive === 'false' ? false : undefined;
   const normalizedSearch = search ? normalizeVehicleNumber(search) : '';
   return prisma.vehicle.findMany({
     where: {
       isActive,
-      isPilotActive,
       department: department ? { contains: department, mode: 'insensitive' } : undefined,
       OR: search ? [
         { plateNumber: { contains: normalizedSearch } },
@@ -54,13 +51,11 @@ export async function createVehicle(input: Record<string, unknown>, metadata: Re
   const brand = required(input.brand, 'Марка обов’язкова.');
   const model = required(input.model, 'Модель обов’язкова.');
   const department = required(input.department, 'УПП обов’язкове.');
-  const isPilotActive = input.isPilotActive === true;
   try {
     const vehicle = await prisma.vehicle.create({
-      data: { plateNumber, displayPlateNumber, brand, model, department, isPilotActive, isActive: input.isActive !== false },
+      data: { plateNumber, displayPlateNumber, brand, model, department, isActive: input.isActive !== false },
     });
     await createAuditLog({ action: 'Створено автомобіль', entityType: 'vehicle', entityId: vehicle.id, details: `${plateNumber}; ${brand} ${model}`, ...metadata });
-    if (isPilotActive) await createAuditLog({ action: 'Змінено доступність у пілоті', entityType: 'vehicle', entityId: vehicle.id, details: `${plateNumber}: доступ увімкнено`, ...metadata });
     return vehicle;
   } catch (error) { uniqueVehicleError(error); }
 }
@@ -81,14 +76,10 @@ export async function updateVehicle(id: string, input: Record<string, unknown>, 
         brand: input.brand === undefined ? undefined : required(input.brand, 'Марка обов’язкова.'),
         model: input.model === undefined ? undefined : required(input.model, 'Модель обов’язкова.'),
         department: input.department === undefined ? undefined : required(input.department, 'УПП обов’язкове.'),
-        isPilotActive: input.isPilotActive === undefined ? undefined : Boolean(input.isPilotActive),
         isActive: input.isActive === undefined ? undefined : Boolean(input.isActive),
       },
     });
     await createAuditLog({ action: 'Оновлено автомобіль', entityType: 'vehicle', entityId: id, details: `${plateNumber}; ${vehicle.brand} ${vehicle.model}`, ...metadata });
-    if (input.isPilotActive !== undefined && Boolean(input.isPilotActive) !== current.isPilotActive) {
-      await createAuditLog({ action: 'Змінено доступність у пілоті', entityType: 'vehicle', entityId: id, details: `${plateNumber}: ${input.isPilotActive ? 'доступ увімкнено' : 'доступ вимкнено'}`, ...metadata });
-    }
     return vehicle;
   } catch (error) { uniqueVehicleError(error); }
 }
@@ -96,6 +87,6 @@ export async function updateVehicle(id: string, input: Record<string, unknown>, 
 export async function deactivateVehicle(id: string, metadata: RequestMetadata = {}) {
   const current = await prisma.vehicle.findUnique({ where: { id } });
   if (!current) throw new AppError('Автомобіль не знайдено.', 404);
-  await prisma.vehicle.update({ where: { id }, data: { isActive: false, isPilotActive: false } });
+  await prisma.vehicle.update({ where: { id }, data: { isActive: false } });
   await createAuditLog({ action: 'Деактивовано автомобіль', entityType: 'vehicle', entityId: id, details: current.plateNumber, ...metadata });
 }

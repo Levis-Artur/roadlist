@@ -54,7 +54,7 @@ PATCH /api/officers/:id
 DELETE /api/officers/:id
 ```
 
-Створення приймає `badgeNumber`, `fullName`, `department`, `pin`, `isActive` і `isPilotAllowed`; PIN має 4–8 цифр. Під час оновлення порожній/відсутній `pin` не змінює поточний hash. API повертає тільки `hasPin`. `DELETE` виконує soft-disable патрульного та його пілотного доступу.
+Створення приймає `badgeNumber`, `fullName`, `department`, `pin` і `isActive`; PIN має 4–8 цифр. Під час оновлення порожній/відсутній `pin` не змінює поточний hash. API повертає тільки `hasPin`. `DELETE` виконує soft-disable патрульного.
 
 ### Початок зміни
 
@@ -121,20 +121,17 @@ Content-Type: application/json
 
 Файли зберігаються в `uploads/`, метадані — у PostgreSQL. Строк зберігання фото становить 30 днів.
 
-### Пілотний режим і автомобілі
+### Автомобілі
 
 ```http
-GET /api/pilot/status
-GET /api/vehicles/pilot
+GET /api/vehicles/available
 GET /api/vehicles
 POST /api/vehicles
 PATCH /api/vehicles/:id
 DELETE /api/vehicles/:id
 ```
 
-`GET /api/vehicles/pilot` повертає тільки активні автомобілі з `PILOT_DEPARTMENT`. У pilot mode перевірка жетона додатково використовує `PilotOfficerAccess`, а нові маршрутні листи отримують `isPilot`, `pilotDepartment` і необов’язковий `pilotComment`.
-
-`GET /api/vehicles` підтримує `search`, `department`, `isPilotActive` та `isActive`. Backend нормалізує `displayPlateNumber` під час створення й оновлення; `DELETE` встановлює `isActive=false` та `isPilotActive=false`, не видаляючи історію.
+`GET /api/vehicles/available` повертає всі активні автомобілі для патрульного інтерфейсу. `GET /api/vehicles` підтримує `search`, `department` та `isActive`. Backend нормалізує `displayPlateNumber` під час створення й оновлення; `DELETE` встановлює `isActive=false`, не видаляючи історію.
 
 ### Адміністратор і журнал
 
@@ -160,19 +157,13 @@ Mock token і пароль призначені лише для MVP та не є
 - password: `route_sheet_password`;
 - port: `5432`.
 
-Параметри пілоту:
-
 ```env
-PILOT_MODE=true
-PILOT_DEPARTMENT="УПП у Волинській області"
-PILOT_START_DATE="2026-06-19"
-PILOT_END_DATE="2026-06-26"
 JWT_SECRET="CHANGE_ME_SECRET"
 JWT_EXPIRES_IN="12h"
 ```
 
 У production `JWT_SECRET` обов’язково потрібно замінити на сильний секрет; сервер навмисно відмовляється стартувати з `CHANGE_ME_SECRET` у production mode.
 
-Seed створює три записи `PilotOfficerAccess` і один автомобіль: Hyundai Sonata з номером `АА5200МН` для відображення та нормалізованим `AA5200MH` для збереження й пошуку.
+Seed створює трьох активних патрульних і один активний автомобіль: Hyundai Sonata з номером `АА5200МН` для відображення та нормалізованим `AA5200MH` для збереження й пошуку.
 
 Frontend підключений до цих endpoint-ів через власний service layer і має локальний MVP-fallback на випадок мережевої недоступності API.

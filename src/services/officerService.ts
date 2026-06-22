@@ -22,7 +22,7 @@ export const PIN_ERROR = 'PIN має містити від 4 до 8 цифр.';
 
 function initialOfficers(): Officer[] {
   const now = new Date().toISOString();
-  return patrolOfficers.map((officer, index) => ({ ...officer, id: `local-officer-${index + 1}`, isActive: true, isPilotAllowed: true, hasPin: true, createdAt: now, updatedAt: now }));
+  return patrolOfficers.map((officer, index) => ({ ...officer, id: `local-officer-${index + 1}`, isActive: true, hasPin: true, createdAt: now, updatedAt: now }));
 }
 
 async function hashPin(pin: string): Promise<string> {
@@ -84,14 +84,12 @@ function filteredLocalOfficers(filters: OfficerFilters) {
   const search = filters.search?.trim().toLocaleLowerCase('uk-UA');
   return localOfficers().filter((officer) => (!search || `${officer.fullName} ${officer.badgeNumber}`.toLocaleLowerCase('uk-UA').includes(search))
     && (!filters.department || officer.department.toLocaleLowerCase('uk-UA').includes(filters.department.toLocaleLowerCase('uk-UA')))
-    && (filters.isActive === undefined || Boolean(officer.isActive) === filters.isActive)
-    && (filters.isPilotAllowed === undefined || Boolean(officer.isPilotAllowed) === filters.isPilotAllowed));
+    && (filters.isActive === undefined || Boolean(officer.isActive) === filters.isActive));
 }
 
 async function verifyOfficerLocally(badgeNumber: string): Promise<Officer | null> {
   await new Promise((resolve) => setTimeout(resolve, 400));
   const officer = localOfficers().find((item) => item.badgeNumber === badgeNumber && item.isActive !== false);
-  if (officer && officer.isPilotAllowed === false) throw new Error('Цей працівник не включений до пілотного тестування.');
   return officer ?? null;
 }
 
@@ -119,7 +117,6 @@ export async function createOfficer(input: CreateOfficerInput): Promise<Officer>
     const hashes = await pinHashesWithDefaults(); hashes[officer.badgeNumber] = await hashPin(pin); localStorage.setItem(OFFICER_PIN_STORAGE_KEY, JSON.stringify(hashes));
     await addAuditLog({ action: 'Створено патрульного', entityType: 'officer', entityId: officer.id, badgeNumber: officer.badgeNumber, details: `${officer.fullName}; ${officer.department}` }).catch(() => undefined);
     await addAuditLog({ action: 'Адміністратор встановив PIN', entityType: 'officer', entityId: officer.id, badgeNumber: officer.badgeNumber, details: officer.fullName }).catch(() => undefined);
-    if (officer.isPilotAllowed) await addAuditLog({ action: 'Змінено доступ до пілоту', entityType: 'officer', entityId: officer.id, badgeNumber: officer.badgeNumber, details: 'Доступ увімкнено' }).catch(() => undefined);
     return officer;
   }
 }
@@ -150,7 +147,6 @@ export async function updateOfficer(id: string, input: UpdateOfficerInput): Prom
     localStorage.setItem(OFFICER_PIN_STORAGE_KEY, JSON.stringify(hashes));
     await addAuditLog({ action: 'Оновлено патрульного', entityType: 'officer', entityId: id, badgeNumber: updated.badgeNumber, details: `${updated.fullName}; ${updated.department}` }).catch(() => undefined);
     if (pin) await addAuditLog({ action: 'Адміністратор змінив PIN', entityType: 'officer', entityId: id, badgeNumber: updated.badgeNumber, details: updated.fullName }).catch(() => undefined);
-    if (input.isPilotAllowed !== undefined) await addAuditLog({ action: 'Змінено доступ до пілоту', entityType: 'officer', entityId: id, badgeNumber: updated.badgeNumber, details: input.isPilotAllowed ? 'Доступ увімкнено' : 'Доступ вимкнено' }).catch(() => undefined);
     return updated;
   }
 }
@@ -172,7 +168,6 @@ export async function loginOfficer(badgeNumber: string, pin: string): Promise<{ 
     const officer = localOfficers().find((item) => item.badgeNumber === normalizedBadge);
     if (!officer) throw new Error('Невірний номер жетона або PIN');
     if (officer.isActive === false) throw new Error('Обліковий запис патрульного неактивний');
-    if (officer.isPilotAllowed === false) throw new Error('Цей працівник не включений до пілотного тестування');
     const hashes = await pinHashesWithDefaults();
     if (!hashes[normalizedBadge] || hashes[normalizedBadge] !== await hashPin(pin)) {
       await addAuditLog({ action: 'Невдала спроба входу патрульного', entityType: 'officer', badgeNumber: normalizedBadge }).catch(() => undefined);
@@ -204,7 +199,7 @@ export async function deactivateOfficer(id: string): Promise<void> {
   try { await apiDelete(`/api/officers/${id}`); }
   catch (error) {
     if (!isApiUnavailableError(error)) throw error;
-    const officers = localOfficers().map((item) => item.id === id ? { ...item, isActive: false, isPilotAllowed: false, updatedAt: new Date().toISOString() } : item);
+    const officers = localOfficers().map((item) => item.id === id ? { ...item, isActive: false, updatedAt: new Date().toISOString() } : item);
     saveLocalOfficers(officers);
     const officer = officers.find((item) => item.id === id);
     await addAuditLog({ action: 'Деактивовано патрульного', entityType: 'officer', entityId: id, badgeNumber: officer?.badgeNumber, details: officer?.fullName }).catch(() => undefined);

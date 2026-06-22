@@ -2,13 +2,13 @@ import { Router } from 'express';
 import {
   createVehicleController,
   deactivateVehicleController,
-  listPilotVehiclesController,
+  listAvailableVehiclesController,
   listVehiclesController,
   updateVehicleController,
 } from '../controllers/vehicle.controller.js';
 
 export const vehicleRouter = Router();
-vehicleRouter.get('/pilot', listPilotVehiclesController);
+vehicleRouter.get('/available', listAvailableVehiclesController);
 vehicleRouter.get('/', listVehiclesController);
 vehicleRouter.post('/', createVehicleController);
 vehicleRouter.patch('/:id', updateVehicleController);

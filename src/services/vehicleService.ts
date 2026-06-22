@@ -5,13 +5,12 @@ import { addAuditLog } from './auditService';
 import { extractEntity, extractList } from '../utils/apiResponse';
 
 const VEHICLE_STORAGE_KEY = 'patrol-vehicle-directory';
-const PILOT_DEPARTMENT = 'УПП у Волинській області';
 interface VehiclesResponse { success: boolean; vehicles: Vehicle[] }
 interface VehicleResponse { success: boolean; vehicle: Vehicle }
 
 function initialVehicles(): Vehicle[] {
   const now = new Date().toISOString();
-  return [{ id: 'local-vehicle-1', plateNumber: 'AA5200MH', displayPlateNumber: 'АА5200МН', brand: 'Hyundai', model: 'Sonata', department: PILOT_DEPARTMENT, isPilotActive: true, isActive: true, createdAt: now, updatedAt: now }];
+  return [{ id: 'local-vehicle-1', plateNumber: 'AA5200MH', displayPlateNumber: 'АА5200МН', brand: 'Hyundai', model: 'Sonata', department: 'УПП у Волинській області', isActive: true, createdAt: now, updatedAt: now }];
 }
 
 function localVehicles(): Vehicle[] {
@@ -37,17 +36,16 @@ function filteredLocalVehicles(filters: VehicleFilters) {
   const normalized = search ? normalizeVehicleNumber(search) : '';
   return localVehicles().filter((vehicle) => (!search || `${vehicle.brand} ${vehicle.model} ${vehicle.displayPlateNumber}`.toLocaleLowerCase('uk-UA').includes(search) || vehicle.plateNumber.includes(normalized))
     && (!filters.department || vehicle.department.toLocaleLowerCase('uk-UA').includes(filters.department.toLocaleLowerCase('uk-UA')))
-    && (filters.isActive === undefined || vehicle.isActive === filters.isActive)
-    && (filters.isPilotActive === undefined || vehicle.isPilotActive === filters.isPilotActive));
+    && (filters.isActive === undefined || vehicle.isActive === filters.isActive));
 }
 
 export async function getVehicles(filters: VehicleFilters = {}): Promise<Vehicle[]> {
   try { return extractList<Vehicle>(await apiGet<unknown>(`/api/vehicles${queryString(filters)}`), 'vehicles'); }
   catch (error) { if (!isApiUnavailableError(error)) throw error; return filteredLocalVehicles(filters); }
 }
-export async function getPilotVehicles(): Promise<Vehicle[]> {
-  try { return extractList<Vehicle>(await apiGet<unknown>('/api/vehicles/pilot'), 'vehicles'); }
-  catch (error) { if (!isApiUnavailableError(error)) throw error; return filteredLocalVehicles({ isActive: true, isPilotActive: true }); }
+export async function getAvailableVehicles(): Promise<Vehicle[]> {
+  try { return extractList<Vehicle>(await apiGet<unknown>('/api/vehicles/available'), 'vehicles'); }
+  catch (error) { if (!isApiUnavailableError(error)) throw error; return filteredLocalVehicles({ isActive: true }); }
 }
 export async function createVehicle(input: CreateVehicleInput): Promise<Vehicle> {
   try {
@@ -64,7 +62,6 @@ export async function createVehicle(input: CreateVehicleInput): Promise<Vehicle>
     const vehicle: Vehicle = { ...input, plateNumber, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
     saveLocalVehicles([...vehicles, vehicle]);
     await addAuditLog({ action: 'Створено автомобіль', entityType: 'vehicle', entityId: vehicle.id, details: `${vehicle.plateNumber}; ${vehicle.brand} ${vehicle.model}` }).catch(() => undefined);
-    if (vehicle.isPilotActive) await addAuditLog({ action: 'Змінено доступність у пілоті', entityType: 'vehicle', entityId: vehicle.id, details: `${vehicle.plateNumber}: доступ увімкнено` }).catch(() => undefined);
     return vehicle;
   }
 }
@@ -84,7 +81,6 @@ export async function updateVehicle(id: string, input: UpdateVehicleInput): Prom
     vehicles[index] = updated;
     saveLocalVehicles(vehicles);
     await addAuditLog({ action: 'Оновлено автомобіль', entityType: 'vehicle', entityId: id, details: `${updated.plateNumber}; ${updated.brand} ${updated.model}` }).catch(() => undefined);
-    if (input.isPilotActive !== undefined) await addAuditLog({ action: 'Змінено доступність у пілоті', entityType: 'vehicle', entityId: id, details: `${updated.plateNumber}: ${input.isPilotActive ? 'доступ увімкнено' : 'доступ вимкнено'}` }).catch(() => undefined);
     return updated;
   }
 }
@@ -92,7 +88,7 @@ export async function deactivateVehicle(id: string): Promise<void> {
   try { await apiDelete(`/api/vehicles/${id}`); }
   catch (error) {
     if (!isApiUnavailableError(error)) throw error;
-    const vehicles = localVehicles().map((item) => item.id === id ? { ...item, isActive: false, isPilotActive: false, updatedAt: new Date().toISOString() } : item);
+    const vehicles = localVehicles().map((item) => item.id === id ? { ...item, isActive: false, updatedAt: new Date().toISOString() } : item);
     saveLocalVehicles(vehicles);
     await addAuditLog({ action: 'Деактивовано автомобіль', entityType: 'vehicle', entityId: id, details: vehicles.find((item) => item.id === id)?.plateNumber }).catch(() => undefined);
   }
