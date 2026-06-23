@@ -14,6 +14,19 @@ export interface CreateOfficerInput { badgeNumber: string; fullName: string; dep
 export type UpdateOfficerInput = Partial<CreateOfficerInput>;
 
 export type RouteSheetStatus = 'active' | 'completed' | 'needs_review' | 'verified';
+export type AdminRole = 'SYSTEM_OWNER' | 'NATIONAL_ADMIN' | 'REGIONAL_ADMIN';
+
+export interface AdminUser {
+  id: string;
+  username: string;
+  fullName: string;
+  role: AdminRole;
+  department?: string | null;
+  isActive: boolean;
+  createdById?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
 
 export interface RouteSheetFilters {
   status?: RouteSheetStatus;
@@ -38,6 +51,8 @@ export interface VehicleAvailability {
   activeShiftId: string | null;
   occupiedBy: string | null;
   startedAt: string | null;
+  monthlyRouteSheetMonth?: number | null;
+  monthlyRouteSheetYear?: number | null;
 }
 
 export interface VehicleFilters { search?: string; department?: string; isActive?: boolean }

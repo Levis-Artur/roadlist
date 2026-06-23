@@ -158,9 +158,16 @@ export async function getRouteSheetById(id: string): Promise<RouteSheet | null> 
 }
 
 export async function getActiveRouteSheetByOfficer(badgeNumber: string): Promise<RouteSheet | null> {
-  return (await getRouteSheets({ status: 'active', search: badgeNumber })).find(
-    (item) => item.badgeNumber === badgeNumber.trim() && item.status === 'active',
-  ) ?? null;
+  try {
+    return extractList<RouteSheet>(await apiGet<unknown>('/api/route-sheets/active/me'), 'routeSheets')
+      .map(normalizeRouteSheet)
+      .find((item) => item.badgeNumber === badgeNumber.trim() && item.status === 'active') ?? null;
+  } catch (error) {
+    if (!isApiUnavailableError(error)) throw error;
+    return localRouteSheets({ status: 'active' }).find(
+      (item) => item.badgeNumber === badgeNumber.trim() && item.status === 'active',
+    ) ?? null;
+  }
 }
 
 export async function reportDuplicateShiftAttempt(routeSheet: RouteSheet): Promise<void> {
@@ -172,7 +179,9 @@ export async function findActiveRouteSheetForFinish(
   crewNumber: string | null | undefined,
   vehicleNumber: string,
 ): Promise<RouteSheet | null> {
-  return (await getRouteSheets({ status: 'active', search: badgeNumber })).find(
+  const activeSheets = await getActiveRouteSheetByOfficer(badgeNumber);
+  const candidates = activeSheets ? [activeSheets] : localRouteSheets({ status: 'active' });
+  return candidates.find(
     (item) => item.badgeNumber === badgeNumber.trim()
       && normalizeVehicleNumber(item.vehicleNumber) === normalizeVehicleNumber(vehicleNumber)
       && (!crewNumber?.trim()

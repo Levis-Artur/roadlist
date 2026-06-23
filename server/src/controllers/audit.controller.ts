@@ -1,9 +1,9 @@
 import type { NextFunction, Request, Response } from 'express';
 import { createAuditLog, listAuditLogs } from '../services/audit.service.js';
 
-export async function listAuditLogsController(_request: Request, response: Response, next: NextFunction) {
+export async function listAuditLogsController(request: Request, response: Response, next: NextFunction) {
   try {
-    const auditLogs = await listAuditLogs();
+    const auditLogs = await listAuditLogs(request.admin);
     response.json({ success: true, auditLogs: Array.isArray(auditLogs) ? auditLogs : [] });
   } catch (error) {
     next(error);
@@ -21,6 +21,10 @@ export async function createAuditLogController(request: Request, response: Respo
       details: input.details ? String(input.details) : undefined,
       ipAddress: request.ip,
       userAgent: request.get('user-agent'),
+      actorAdminId: request.admin?.adminId,
+      actorUsername: request.admin?.username,
+      actorRole: request.admin?.role,
+      actorDepartment: request.admin?.department ?? null,
     });
     response.status(201).json({ success: true, auditLog });
   } catch (error) { next(error); }

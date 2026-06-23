@@ -121,17 +121,41 @@ model OdometerPhoto {
   @@index([expiresAt, deletedAt])
 }
 
+model AdminUser {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  fullName     String
+  role         String
+  department   String?
+  passwordHash String
+  isActive     Boolean  @default(true)
+  createdById  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([role, isActive])
+  @@index([department, isActive])
+}
+
 model AuditLog {
-  id          String   @id @default(uuid())
-  action      String
-  entityType  String
-  entityId    String?
-  badgeNumber String?
-  details     String?
-  ipAddress   String?
-  userAgent   String?
-  createdAt   DateTime @default(now())
+  id                String   @id @default(uuid())
+  action            String
+  entityType        String
+  entityId          String?
+  badgeNumber       String?
+  details           String?
+  ipAddress         String?
+  userAgent         String?
+  actorAdminId      String?
+  actorUsername     String?
+  actorRole         String?
+  actorDepartment   String?
+  targetAdminId     String?
+  targetRole        String?
+  targetDepartment  String?
+  createdAt         DateTime @default(now())
 
   @@index([createdAt])
   @@index([entityType, entityId])
+  @@index([actorRole, actorDepartment])
 }

@@ -2,7 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import {
   createOfficer,
   deactivateOfficer,
-  listOfficers,
+  listOfficersScoped,
   loginOfficer,
   logoutOfficer,
   updateOfficer,
@@ -10,7 +10,14 @@ import {
 } from '../services/officer.service.js';
 
 function metadata(request: Request) {
-  return { ipAddress: request.ip, userAgent: request.get('user-agent') };
+  return {
+    ipAddress: request.ip,
+    userAgent: request.get('user-agent'),
+    actorAdminId: request.admin?.adminId,
+    actorUsername: request.admin?.username,
+    actorRole: request.admin?.role,
+    actorDepartment: request.admin?.department ?? null,
+  };
 }
 
 export async function loginOfficerController(request: Request, response: Response, next: NextFunction) {
@@ -29,26 +36,26 @@ export async function logoutOfficerController(request: Request, response: Respon
 
 export async function listOfficersController(request: Request, response: Response, next: NextFunction) {
   try {
-    const officers = await listOfficers(request.query);
+    const officers = await listOfficersScoped(request.query, request.admin);
     response.json({ success: true, officers: Array.isArray(officers) ? officers : [] });
   } catch (error) { next(error); }
 }
 
 export async function createOfficerController(request: Request, response: Response, next: NextFunction) {
   try {
-    response.status(201).json({ success: true, officer: await createOfficer(request.body ?? {}, metadata(request)) });
+    response.status(201).json({ success: true, officer: await createOfficer(request.body ?? {}, metadata(request), request.admin) });
   } catch (error) { next(error); }
 }
 
 export async function updateOfficerController(request: Request, response: Response, next: NextFunction) {
   try {
-    response.json({ success: true, officer: await updateOfficer(request.params.id, request.body ?? {}, metadata(request)) });
+    response.json({ success: true, officer: await updateOfficer(request.params.id, request.body ?? {}, metadata(request), request.admin) });
   } catch (error) { next(error); }
 }
 
 export async function deactivateOfficerController(request: Request, response: Response, next: NextFunction) {
   try {
-    await deactivateOfficer(request.params.id, metadata(request));
+    await deactivateOfficer(request.params.id, metadata(request), request.admin);
     response.json({ success: true, message: 'Патрульного деактивовано' });
   } catch (error) { next(error); }
 }

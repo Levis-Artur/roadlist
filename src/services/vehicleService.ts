@@ -45,6 +45,7 @@ function withLocalAvailability(vehicles: Vehicle[]): Vehicle[] {
   const activeRouteSheets = routeSheetStorage.getAll().filter((item) => item.status === 'active');
   return vehicles.map((vehicle) => {
     const activeShift = activeRouteSheets.find((item) => item.vehicleNumber === vehicle.plateNumber);
+    const startedAt = activeShift ? new Date(activeShift.startedAt) : null;
     return {
       ...vehicle,
       availability: activeShift
@@ -53,12 +54,16 @@ function withLocalAvailability(vehicles: Vehicle[]): Vehicle[] {
             activeShiftId: activeShift.id,
             occupiedBy: activeShift.fullName,
             startedAt: activeShift.startedAt,
+            monthlyRouteSheetMonth: startedAt ? startedAt.getMonth() + 1 : null,
+            monthlyRouteSheetYear: startedAt ? startedAt.getFullYear() : null,
           }
         : {
             status: 'available',
             activeShiftId: null,
             occupiedBy: null,
             startedAt: null,
+            monthlyRouteSheetMonth: null,
+            monthlyRouteSheetYear: null,
           },
     };
   });

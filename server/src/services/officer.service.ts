@@ -4,7 +4,7 @@ import jwt, { type SignOptions } from 'jsonwebtoken';
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
 import { AppError } from '../middleware/errorHandler.js';
-import type { RequestMetadata } from '../types/index.js';
+import type { AdminTokenPayload, RequestMetadata } from '../types/index.js';
 import { createAuditLog } from './audit.service.js';
 import { validateBadgeNumber } from '../utils/badgeNumber.js';
 
@@ -65,10 +65,25 @@ export async function listOfficers(filters: Record<string, unknown>) {
   return officers.map(publicOfficer);
 }
 
-export async function createOfficer(input: Record<string, unknown>, metadata: RequestMetadata = {}) {
+function scopedDepartment(actor?: AdminTokenPayload, requestedDepartment?: string) {
+  return actor?.role === 'REGIONAL_ADMIN' ? actor.department ?? '' : requestedDepartment;
+}
+
+function assertDepartmentAccess(actor: AdminTokenPayload | undefined, department: string) {
+  if (actor?.role === 'REGIONAL_ADMIN' && department !== actor.department) {
+    throw new AppError('Недостатньо прав для доступу до чужого УПП.', 403);
+  }
+}
+
+export async function listOfficersScoped(filters: Record<string, unknown>, actor?: AdminTokenPayload) {
+  return listOfficers({ ...filters, department: scopedDepartment(actor, typeof filters.department === 'string' ? filters.department : undefined) });
+}
+
+export async function createOfficer(input: Record<string, unknown>, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const badgeNumber = validateBadgeNumber(input.badgeNumber);
   const fullName = required(input.fullName, 'ПІБ обов’язкове.');
   const department = required(input.department, 'УПП обов’язкове.');
+  assertDepartmentAccess(actor, department);
   const pin = validatePin(input.pin);
   const pinHash = await bcrypt.hash(pin, 10);
   const isActive = input.isActive !== false;
@@ -80,12 +95,14 @@ export async function createOfficer(input: Record<string, unknown>, metadata: Re
   } catch (error) { uniqueOfficerError(error); }
 }
 
-export async function updateOfficer(id: string, input: Record<string, unknown>, metadata: RequestMetadata = {}) {
+export async function updateOfficer(id: string, input: Record<string, unknown>, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const current = await prisma.officer.findUnique({ where: { id } });
   if (!current) throw new AppError('Патрульного не знайдено.', 404);
+  assertDepartmentAccess(actor, current.department);
   const badgeNumber = input.badgeNumber === undefined ? current.badgeNumber : validateBadgeNumber(input.badgeNumber);
   const fullName = input.fullName === undefined ? current.fullName : required(input.fullName, 'ПІБ обов’язкове.');
   const department = input.department === undefined ? current.department : required(input.department, 'УПП обов’язкове.');
+  assertDepartmentAccess(actor, department);
   const pinHash = input.pin === undefined || input.pin === '' ? undefined : await bcrypt.hash(validatePin(input.pin), 10);
   try {
     const officer = await prisma.officer.update({
@@ -98,9 +115,10 @@ export async function updateOfficer(id: string, input: Record<string, unknown>, 
   } catch (error) { uniqueOfficerError(error); }
 }
 
-export async function deactivateOfficer(id: string, metadata: RequestMetadata = {}) {
+export async function deactivateOfficer(id: string, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const current = await prisma.officer.findUnique({ where: { id } });
   if (!current) throw new AppError('Патрульного не знайдено.', 404);
+  assertDepartmentAccess(actor, current.department);
   await prisma.officer.update({ where: { id }, data: { isActive: false } });
   await createAuditLog({ action: 'Деактивовано патрульного', entityType: 'officer', entityId: id, badgeNumber: current.badgeNumber, details: current.fullName, ...metadata });
 }

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { isAdminAuthenticated, loginAdmin, logoutAdmin } from '../services/adminService';
+import { getCurrentAdmin, isAdminAuthenticated, loginAdmin, logoutAdmin } from '../services/adminService';
 import { AdminPage } from './AdminPage';
 
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -11,8 +12,8 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
     event.preventDefault();
     setSubmitting(true);
     try {
-      if (!await loginAdmin(password)) {
-        setError('Невірний пароль адміністратора');
+      if (!await loginAdmin(username, password)) {
+        setError('Невірний логін або пароль адміністратора');
         return;
       }
       setError('');
@@ -31,13 +32,21 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
         <p>Доступ лише для уповноважених осіб</p>
         <form onSubmit={submit}>
           <label>
+            Логін
+            <input
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              autoComplete="username"
+              autoFocus
+            />
+          </label>
+          <label>
             Пароль
             <input
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               autoComplete="current-password"
-              autoFocus
             />
           </label>
           <button type="submit" disabled={submitting}>{submitting ? 'Вхід…' : 'Увійти'}</button>
@@ -52,11 +61,15 @@ export function AdminRoute() {
   const [authenticated, setAuthenticated] = useState(
     () => isAdminAuthenticated(),
   );
+  const [admin, setAdmin] = useState(() => getCurrentAdmin());
 
   function logout() {
     logoutAdmin();
     setAuthenticated(false);
+    setAdmin(null);
   }
 
-  return authenticated ? <AdminPage onLogout={logout} /> : <AdminLogin onLogin={() => setAuthenticated(true)} />;
+  return authenticated && admin
+    ? <AdminPage admin={admin} onLogout={logout} />
+    : <AdminLogin onLogin={() => { setAdmin(getCurrentAdmin()); setAuthenticated(true); }} />;
 }

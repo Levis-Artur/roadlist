@@ -139,14 +139,21 @@ DELETE /api/vehicles/:id
 POST /api/admin/login
 Content-Type: application/json
 
-{"password":"admin123"}
+{"username":"owner","password":"owner12345"}
 ```
 
 ```http
-GET /api/audit-logs
+GET /api/audit
+Authorization: Bearer ADMIN_JWT
 ```
 
-Mock token і пароль призначені лише для MVP та не є production-авторизацією.
+Відповідь містить JWT і public-профіль адміністратора. Seed створює одного `SYSTEM_OWNER`: `owner / owner12345`. Цей пароль призначений лише для локального MVP/seed і має бути змінений у production.
+
+Ролі:
+
+- `SYSTEM_OWNER` — власник системи, бачить усі дані, створює `NATIONAL_ADMIN` і `REGIONAL_ADMIN`; не редагується і не деактивується через API/UI.
+- `NATIONAL_ADMIN` — бачить усю Україну, створює тільки `REGIONAL_ADMIN`.
+- `REGIONAL_ADMIN` — бачить і змінює тільки дані свого УПП; backend застосовує це обмеження до патрульних, автомобілів, маршрутних листів, місячних листів і audit logs.
 
 ## Налаштування
 

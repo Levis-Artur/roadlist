@@ -30,7 +30,21 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 12_000);
   try {
-    const token = sessionStorage.getItem('officer_token') || sessionStorage.getItem('admin_token');
+    const adminOnlyPath = path.startsWith('/api/admin')
+      || (path.startsWith('/api/officers')
+        && !path.startsWith('/api/officers/login')
+        && !path.startsWith('/api/officers/logout')
+        && !path.startsWith('/api/officers/verify'))
+      || (path.startsWith('/api/route-sheets')
+        && !path.startsWith('/api/route-sheets/start')
+        && !path.startsWith('/api/route-sheets/finish')
+        && !path.startsWith('/api/route-sheets/active/me'))
+      || path.startsWith('/api/monthly-route-sheets')
+      || path.startsWith('/api/audit')
+      || (path.startsWith('/api/vehicles') && !path.startsWith('/api/vehicles/available'));
+    const token = adminOnlyPath
+      ? sessionStorage.getItem('admin_token')
+      : sessionStorage.getItem('officer_token') || sessionStorage.getItem('admin_token');
     const response = await fetch(getApiUrl(path), {
       ...init,
       signal: controller.signal,

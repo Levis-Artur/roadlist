@@ -19,7 +19,6 @@ export const env = {
   port: numberFromEnv(process.env.PORT, 4000),
   databaseUrl: process.env.DATABASE_URL ?? '',
   uploadDir: path.resolve(process.cwd(), process.env.UPLOAD_DIR ?? './uploads'),
-  adminPassword: process.env.ADMIN_PASSWORD ?? 'admin123',
   jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '12h',
   nodeEnv,

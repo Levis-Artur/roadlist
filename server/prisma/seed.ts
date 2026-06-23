@@ -20,6 +20,36 @@ const vehicles = [
 ];
 
 async function main() {
+  const ownerPasswordHash = await bcrypt.hash('owner12345', 10);
+  await prisma.adminUser.upsert({
+    where: { username: 'owner' },
+    update: {
+      fullName: 'Левіс Артур Сергійович',
+      role: 'SYSTEM_OWNER',
+      department: null,
+      passwordHash: ownerPasswordHash,
+      isActive: true,
+      createdById: null,
+    },
+    create: {
+      username: 'owner',
+      fullName: 'Левіс Артур Сергійович',
+      role: 'SYSTEM_OWNER',
+      department: null,
+      passwordHash: ownerPasswordHash,
+      isActive: true,
+      createdById: null,
+    },
+  });
+  await prisma.adminUser.updateMany({
+    where: { username: { in: ['superadmin1', 'superadmin2'] } },
+    data: { isActive: false },
+  });
+  await prisma.adminUser.updateMany({
+    where: { role: 'SYSTEM_OWNER', username: { not: 'owner' } },
+    data: { isActive: false },
+  });
+
   const legacyBadges = ['000001', '000002', '000003'];
   await prisma.officer.updateMany({ where: { badgeNumber: { in: legacyBadges } }, data: { isActive: false } });
   for (const officer of officers) {
@@ -38,7 +68,7 @@ async function main() {
       create: { ...vehicle, isActive: true },
     });
   }
-  console.log(`Seeded ${officers.length} officers and ${vehicles.length} vehicles.`);
+  console.log(`Seeded 1 system owner, ${officers.length} officers and ${vehicles.length} vehicles.`);
 }
 
 main()

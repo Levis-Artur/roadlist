@@ -26,7 +26,6 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       HOST: 0.0.0.0
       PORT: 4000
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-12h}
       UPLOAD_DIR: /app/uploads

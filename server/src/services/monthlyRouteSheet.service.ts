@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
-import type { RequestMetadata } from '../types/index.js';
+import type { AdminTokenPayload, RequestMetadata } from '../types/index.js';
 import { createAuditLog } from './audit.service.js';
 
 export interface MonthlyRouteSheetFilters {
@@ -12,14 +12,21 @@ export interface MonthlyRouteSheetFilters {
   department?: string;
 }
 
-function monthlyWhere(filters: MonthlyRouteSheetFilters): Prisma.VehicleMonthlyRouteSheetWhereInput {
+function monthlyWhere(filters: MonthlyRouteSheetFilters, actor?: AdminTokenPayload): Prisma.VehicleMonthlyRouteSheetWhereInput {
   const where: Prisma.VehicleMonthlyRouteSheetWhereInput = {};
   if (filters.year) where.year = Number(filters.year);
   if (filters.month) where.month = Number(filters.month);
   if (filters.vehicleId) where.vehicleId = filters.vehicleId;
   if (filters.status) where.status = filters.status;
-  if (filters.department) where.department = { contains: filters.department, mode: 'insensitive' };
+  if (actor?.role === 'REGIONAL_ADMIN') where.department = actor.department ?? '';
+  else if (filters.department) where.department = { contains: filters.department, mode: 'insensitive' };
   return where;
+}
+
+function assertDepartmentAccess(actor: AdminTokenPayload | undefined, department: string) {
+  if (actor?.role === 'REGIONAL_ADMIN' && department !== actor.department) {
+    throw new AppError('Недостатньо прав для доступу до чужого УПП.', 403);
+  }
 }
 
 function withShiftCount<T extends { _count?: { shiftEntries: number } }>(item: T) {
@@ -27,16 +34,16 @@ function withShiftCount<T extends { _count?: { shiftEntries: number } }>(item: T
   return { ...rest, shiftCount: _count?.shiftEntries ?? 0 };
 }
 
-export async function listMonthlyRouteSheets(filters: MonthlyRouteSheetFilters = {}) {
+export async function listMonthlyRouteSheets(filters: MonthlyRouteSheetFilters = {}, actor?: AdminTokenPayload) {
   const items = await prisma.vehicleMonthlyRouteSheet.findMany({
-    where: monthlyWhere(filters),
+    where: monthlyWhere(filters, actor),
     include: { _count: { select: { shiftEntries: true } } },
     orderBy: [{ year: 'desc' }, { month: 'desc' }, { vehicleBrand: 'asc' }, { vehicleModel: 'asc' }],
   });
   return items.map(withShiftCount);
 }
 
-export async function getMonthlyRouteSheet(id: string) {
+export async function getMonthlyRouteSheet(id: string, actor?: AdminTokenPayload) {
   const item = await prisma.vehicleMonthlyRouteSheet.findUnique({
     where: { id },
     include: {
@@ -45,12 +52,14 @@ export async function getMonthlyRouteSheet(id: string) {
     },
   });
   if (!item) throw new AppError('Місячний маршрутний лист не знайдено.', 404);
+  assertDepartmentAccess(actor, item.department);
   return withShiftCount(item);
 }
 
-export async function closeMonthlyRouteSheet(id: string, metadata: RequestMetadata = {}) {
+export async function closeMonthlyRouteSheet(id: string, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const item = await prisma.vehicleMonthlyRouteSheet.findUnique({ where: { id } });
   if (!item) throw new AppError('Місячний маршрутний лист не знайдено.', 404);
+  assertDepartmentAccess(actor, item.department);
   const activeShift = await prisma.routeSheet.findFirst({ where: { monthlyRouteSheetId: id, status: 'active' } });
   if (activeShift) {
     throw new AppError('Неможливо закрити місяць: є незавершені зміни по цьому автомобілю.', 409);
@@ -69,9 +78,10 @@ export async function closeMonthlyRouteSheet(id: string, metadata: RequestMetada
   return closed;
 }
 
-export async function reopenMonthlyRouteSheet(id: string, metadata: RequestMetadata = {}) {
+export async function reopenMonthlyRouteSheet(id: string, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const item = await prisma.vehicleMonthlyRouteSheet.findUnique({ where: { id } });
   if (!item) throw new AppError('Місячний маршрутний лист не знайдено.', 404);
+  assertDepartmentAccess(actor, item.department);
   const reopened = await prisma.vehicleMonthlyRouteSheet.update({
     where: { id },
     data: { status: 'open', closedAt: null, adminCheckedBy: null },
@@ -86,9 +96,10 @@ export async function reopenMonthlyRouteSheet(id: string, metadata: RequestMetad
   return reopened;
 }
 
-export async function markMonthlyRouteSheetPrinted(id: string, metadata: RequestMetadata = {}) {
+export async function markMonthlyRouteSheetPrinted(id: string, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const item = await prisma.vehicleMonthlyRouteSheet.findUnique({ where: { id } });
   if (!item) throw new AppError('Місячний маршрутний лист не знайдено.', 404);
+  assertDepartmentAccess(actor, item.department);
   const printed = await prisma.vehicleMonthlyRouteSheet.update({ where: { id }, data: { printedAt: new Date() } });
   await createAuditLog({
     action: 'Місячний маршрутний лист позначено як надрукований',
@@ -100,6 +111,6 @@ export async function markMonthlyRouteSheetPrinted(id: string, metadata: Request
   return printed;
 }
 
-export async function getMonthlyRouteSheetPrintData(id: string) {
-  return getMonthlyRouteSheet(id);
+export async function getMonthlyRouteSheetPrintData(id: string, actor?: AdminTokenPayload) {
+  return getMonthlyRouteSheet(id, actor);
 }

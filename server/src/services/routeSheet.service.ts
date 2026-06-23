@@ -1,7 +1,7 @@
 import { Prisma, type RouteSheet, type Vehicle } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
-import type { FinishShiftInput, RequestMetadata, RouteSheetFilters, RouteSheetStatus, StartShiftInput } from '../types/index.js';
+import type { AdminTokenPayload, FinishShiftInput, RequestMetadata, RouteSheetFilters, RouteSheetStatus, StartShiftInput } from '../types/index.js';
 import { normalizeVehicleNumber } from '../utils/normalizeVehicleNumber.js';
 import { createAuditLog } from './audit.service.js';
 import { validateBadgeNumber } from '../utils/badgeNumber.js';
@@ -238,12 +238,19 @@ export async function finishShift(input: FinishShiftInput, metadata: RequestMeta
   return routeSheet;
 }
 
-export async function listRouteSheets(filters: RouteSheetFilters) {
+function assertDepartmentAccess(actor: AdminTokenPayload | undefined, department: string) {
+  if (actor?.role === 'REGIONAL_ADMIN' && department !== actor.department) {
+    throw new AppError('Недостатньо прав для доступу до чужого УПП.', 403);
+  }
+}
+
+export async function listRouteSheets(filters: RouteSheetFilters, actor?: AdminTokenPayload) {
   const where: Prisma.RouteSheetWhereInput = {};
   if (filters.status) where.status = filters.status;
   if (filters.badgeNumber) where.badgeNumber = filters.badgeNumber.trim();
   if (filters.vehicleNumber) where.vehicleNumber = normalizeVehicleNumber(filters.vehicleNumber);
-  if (filters.department) where.department = { contains: filters.department, mode: 'insensitive' };
+  if (actor?.role === 'REGIONAL_ADMIN') where.department = actor.department ?? '';
+  else if (filters.department) where.department = { contains: filters.department, mode: 'insensitive' };
   if (filters.search) {
     where.OR = [
       { fullName: { contains: filters.search, mode: 'insensitive' } },
@@ -259,15 +266,24 @@ export async function listRouteSheets(filters: RouteSheetFilters) {
   return prisma.routeSheet.findMany({ where, orderBy: { createdAt: 'desc' } });
 }
 
-export async function getRouteSheet(id: string) {
+export async function listActiveRouteSheetsForOfficer(badgeNumber: string) {
+  return prisma.routeSheet.findMany({
+    where: { badgeNumber: validateBadgeNumber(badgeNumber), status: 'active' },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+export async function getRouteSheet(id: string, actor?: AdminTokenPayload) {
   const routeSheet = await prisma.routeSheet.findUnique({ where: { id } });
   if (!routeSheet) throw new AppError('Маршрутний лист не знайдено.', 404);
+  assertDepartmentAccess(actor, routeSheet.department);
   return routeSheet;
 }
 
-export async function verifyRouteSheet(id: string, comment?: unknown, metadata: RequestMetadata = {}) {
+export async function verifyRouteSheet(id: string, comment?: unknown, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const routeSheet = await prisma.routeSheet.findUnique({ where: { id } });
   if (!routeSheet) throw new AppError('Маршрутний лист не знайдено.', 404);
+  assertDepartmentAccess(actor, routeSheet.department);
   if (routeSheet.status === 'active') throw new AppError('Неможливо перевірити активну незавершену зміну.', 400);
   const updated = await prisma.$transaction(async (tx) => {
     const item = await tx.routeSheet.update({
@@ -293,9 +309,10 @@ export async function verifyRouteSheet(id: string, comment?: unknown, metadata: 
   return updated;
 }
 
-export async function markRouteSheetNeedsReview(id: string, comment?: unknown, metadata: RequestMetadata = {}) {
+export async function markRouteSheetNeedsReview(id: string, comment?: unknown, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const routeSheet = await prisma.routeSheet.findUnique({ where: { id } });
   if (!routeSheet) throw new AppError('Маршрутний лист не знайдено.', 404);
+  assertDepartmentAccess(actor, routeSheet.department);
   if (!['completed', 'verified', 'needs_review'].includes(routeSheet.status)) {
     throw new AppError('Повернути на перевірку можна тільки завершену, перевірену або вже проблемну зміну.', 400);
   }
@@ -321,9 +338,10 @@ export async function markRouteSheetNeedsReview(id: string, comment?: unknown, m
   return updated;
 }
 
-export async function updateRouteSheetAdminComment(id: string, comment?: unknown, metadata: RequestMetadata = {}) {
+export async function updateRouteSheetAdminComment(id: string, comment?: unknown, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const routeSheet = await prisma.routeSheet.findUnique({ where: { id } });
   if (!routeSheet) throw new AppError('Маршрутний лист не знайдено.', 404);
+  assertDepartmentAccess(actor, routeSheet.department);
   const updated = await prisma.routeSheet.update({
     where: { id },
     data: {

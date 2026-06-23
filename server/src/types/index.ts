@@ -1,9 +1,21 @@
 export type RouteSheetStatus = 'active' | 'completed' | 'needs_review' | 'verified';
 export type PhotoType = 'start' | 'end';
+export type AdminRole = 'SYSTEM_OWNER' | 'NATIONAL_ADMIN' | 'REGIONAL_ADMIN';
+
+export interface AdminTokenPayload {
+  adminId: string;
+  username: string;
+  role: AdminRole;
+  department?: string | null;
+}
 
 export interface RequestMetadata {
   ipAddress?: string;
   userAgent?: string;
+  actorAdminId?: string;
+  actorUsername?: string;
+  actorRole?: AdminRole;
+  actorDepartment?: string | null;
 }
 
 export interface StartShiftInput {
@@ -44,4 +56,7 @@ export interface AuditLogInput extends RequestMetadata {
   entityId?: string;
   badgeNumber?: string;
   details?: string;
+  targetAdminId?: string;
+  targetRole?: AdminRole;
+  targetDepartment?: string | null;
 }

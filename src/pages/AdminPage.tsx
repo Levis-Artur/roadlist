@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { OfficerDirectory } from '../components/OfficerDirectory';
 import { VehicleDirectory } from '../components/VehicleDirectory';
+import { AdminUsersDirectory } from '../components/AdminUsersDirectory';
 import { addAuditLog, clearAuditLogs, getAuditLogs } from '../services/auditService';
 import { clearOdometerPhotos, getOdometerPhoto } from '../services/photoService';
 import { clearRouteSheets, getRouteSheetById, getRouteSheets, markRouteSheetNeedsReview, updateRouteSheetAdminComment, verifyRouteSheet } from '../services/routeSheetService';
@@ -15,7 +16,9 @@ import {
   reopenMonthlyRouteSheet,
 } from '../services/monthlyRouteSheetService';
 import type { AuditLog, MonthlyRouteSheet, Officer, RouteSheet, RouteSheetStatus, Vehicle } from '../types';
+import type { AdminUser } from '../types';
 import { findVehicleByNumber, formatVehicleLabel } from '../utils/vehicleDisplay';
+import { adminRoleLabels, canManageAdminUsers } from '../services/adminService';
 
 const statusLabels: Record<RouteSheetStatus, string> = {
   active: 'Активна',
@@ -45,6 +48,13 @@ function formatDate(value?: string, dateOnly = false) {
   return new Intl.DateTimeFormat('uk-UA', dateOnly
     ? { dateStyle: 'short' }
     : { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
+}
+
+function isCrossMonthShift(entry: RouteSheet): boolean {
+  if (!entry.endedAt) return false;
+  const startedAt = new Date(entry.startedAt);
+  const endedAt = new Date(entry.endedAt);
+  return startedAt.getFullYear() !== endedAt.getFullYear() || startedAt.getMonth() !== endedAt.getMonth();
 }
 
 function csvCell(value: string | number | boolean | undefined): string {
@@ -105,8 +115,11 @@ function StoredPhoto({ photoId, alt }: { photoId?: string; alt: string }) {
   return <div className="no-photo">{photoId ? 'Фото недоступне або було видалене.' : 'Фото відсутнє'}</div>;
 }
 
-export function AdminPage({ onLogout }: { onLogout: () => void }) {
-  const [section, setSection] = useState<'route_sheets' | 'monthly_route_sheets' | 'officers' | 'vehicles' | 'audit'>('route_sheets');
+type AdminSection = 'route_sheets' | 'monthly_route_sheets' | 'officers' | 'vehicles' | 'audit' | 'admins';
+
+export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () => void }) {
+  const [section, setSection] = useState<AdminSection>('route_sheets');
+  const canManageAdmins = canManageAdminUsers(admin);
   const [routeSheets, setRouteSheets] = useState<RouteSheet[]>([]);
   const [monthlyRouteSheets, setMonthlyRouteSheets] = useState<MonthlyRouteSheet[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -151,6 +164,10 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
   }
 
   useEffect(() => { void refreshData(); }, []);
+
+  useEffect(() => {
+    if (section === 'admins' && !canManageAdmins) setSection('route_sheets');
+  }, [canManageAdmins, section]);
 
   const filteredRouteSheets = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('uk-UA');
@@ -324,7 +341,11 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
   return (
     <main className="page admin-page">
       <section className="admin-header">
-        <div><span className="eyebrow">Модуль адміністрування</span><h1>Адміністративна панель</h1><p>Реєстр маршрутних листів та службових подій</p></div>
+        <div>
+          <span className="eyebrow">Модуль адміністрування</span><h1>Адміністративна панель</h1>
+          <p>Реєстр маршрутних листів та службових подій</p>
+          <p>Роль: {adminRoleLabels[admin.role]}{admin.role === 'REGIONAL_ADMIN' ? ` · УПП: ${admin.department ?? '—'}` : ''}</p>
+        </div>
         <div className="admin-actions">
           {(section === 'route_sheets' || section === 'monthly_route_sheets' || section === 'audit') && <button type="button" className="secondary compact" onClick={() => void refreshData()} disabled={loading}>Оновити</button>}
           {section === 'route_sheets' && <button type="button" className="secondary compact" onClick={() => exportCsv(routeSheets)} disabled={!routeSheets.length}>Експорт CSV</button>}
@@ -338,6 +359,7 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
         <button className={section === 'monthly_route_sheets' ? 'active' : ''} onClick={() => setSection('monthly_route_sheets')}>Маршрутні листи авто</button>
         <button className={section === 'officers' ? 'active' : ''} onClick={() => setSection('officers')}>Користувачі</button>
         <button className={section === 'vehicles' ? 'active' : ''} onClick={() => setSection('vehicles')}>Автомобілі</button>
+        {canManageAdmins && <button className={section === 'admins' ? 'active' : ''} onClick={() => setSection('admins')}>Адміністратори</button>}
         <button className={section === 'audit' ? 'active' : ''} onClick={() => setSection('audit')}>Журнал дій</button>
       </nav>
 
@@ -347,6 +369,7 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
 
       {section === 'officers' && <OfficerDirectory />}
       {section === 'vehicles' && <VehicleDirectory />}
+      {section === 'admins' && canManageAdmins && <AdminUsersDirectory currentAdmin={admin} />}
 
       <section className="stats-grid" aria-label="Статистика маршрутних листів" hidden={section !== 'route_sheets'}>
         <article><span>Всього листів</span><strong>{stats.total}</strong></article>
@@ -572,7 +595,7 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
                 <thead><tr>
                   <th>Дата</th><th>Час початку</th><th>Час завершення</th><th>ПІБ патрульного</th><th>Жетон</th>
                   <th>Екіпаж / підрозділ</th><th>Початковий км</th><th>Кінцевий км</th><th>Пробіг</th>
-                  <th>Заправка</th><th>Літри</th><th>Фото початку</th><th>Фото завершення</th><th>Статус</th>
+                  <th>Заправка</th><th>Літри</th><th>Фото початку</th><th>Фото завершення</th><th>Примітка</th><th>Статус</th>
                 </tr></thead>
                 <tbody>{(selectedMonthly.shiftEntries ?? []).map((entry) => (
                   <tr key={entry.id}>
@@ -582,6 +605,7 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
                     <td>{entry.refueled ? 'Так' : 'Ні'}</td><td>{entry.refueled ? entry.fuelLiters ?? '—' : '—'}</td>
                     <td><div className="table-photo"><StoredPhoto photoId={entry.startPhotoId} alt="Фото початку зміни" /></div></td>
                     <td><div className="table-photo"><StoredPhoto photoId={entry.endPhotoId} alt="Фото завершення зміни" /></div></td>
+                    <td>{isCrossMonthShift(entry) ? <span className="meta-badge warning">Перехідна зміна</span> : '—'}</td>
                     <td><span className={`status ${entry.status}`}>{statusLabels[entry.status]}</span></td>
                   </tr>
                 ))}</tbody>
@@ -622,7 +646,7 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
                     <td>{formatDate(entry.startedAt)}</td><td>{formatDate(entry.endedAt)}</td><td>{entry.startOdometer}</td>
                     <td>{entry.endOdometer ?? '—'}</td><td>{entry.distanceKm ?? '—'}</td><td>{entry.refueled ? entry.fuelLiters ?? '—' : '—'}</td>
                     <td>{entry.status === 'verified' ? 'Перевірено' : entry.status === 'needs_review' ? 'Потребує перевірки' : '—'}</td>
-                    <td>{entry.adminReviewComment || ''}</td>
+                    <td>{[isCrossMonthShift(entry) ? 'Перехідна зміна' : '', entry.adminReviewComment || ''].filter(Boolean).join('; ')}</td>
                   </tr>
                 ))}</tbody>
               </table>

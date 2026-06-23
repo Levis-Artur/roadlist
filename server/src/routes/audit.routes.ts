@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { createAuditLogController, listAuditLogsController } from '../controllers/audit.controller.js';
+import { authAdmin } from '../middleware/authAdmin.js';
 
 export const auditRouter = Router();
-auditRouter.get('/', listAuditLogsController);
-auditRouter.post('/', createAuditLogController);
+auditRouter.get('/', authAdmin, listAuditLogsController);
+auditRouter.post('/', authAdmin, createAuditLogController);
