@@ -23,6 +23,15 @@ export interface AdminUser {
   role: AdminRole;
   department?: string | null;
   isActive: boolean;
+  mustChangePassword?: boolean;
+  passwordChangedAt?: string | null;
+  failedLoginAttempts?: number;
+  lockedUntil?: string | null;
+  lastLoginAt?: string | null;
+  lastLoginIp?: string | null;
+  twoFactorEnabled?: boolean;
+  twoFactorEnabledAt?: string | null;
+  twoFactorLastVerifiedAt?: string | null;
   createdById?: string | null;
   createdAt?: string;
   updatedAt?: string;

@@ -153,7 +153,7 @@ export async function loginOfficer(badgeValue: unknown, pinValue: unknown, metad
     throw new AppError('Невірний номер жетона або PIN', 401);
   }
   const safeOfficer = { badgeNumber: officer.badgeNumber, fullName: officer.fullName, department: officer.department };
-  const token = jwt.sign(safeOfficer, env.jwtSecret, { expiresIn: env.jwtExpiresIn as SignOptions['expiresIn'], subject: officer.id });
+  const token = jwt.sign(safeOfficer, env.jwtSecret, { expiresIn: env.officerJwtExpiresIn as SignOptions['expiresIn'], subject: officer.id });
   await createAuditLog({ action: 'Вхід патрульного успішний', entityType: 'officer', entityId: officer.id, badgeNumber, details: officer.fullName, ...metadata });
   return { token, officer: safeOfficer };
 }

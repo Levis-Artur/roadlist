@@ -20,27 +20,34 @@ const vehicles = [
 ];
 
 async function main() {
-  const ownerPasswordHash = await bcrypt.hash('owner12345', 10);
-  await prisma.adminUser.upsert({
-    where: { username: 'owner' },
-    update: {
-      fullName: 'Левіс Артур Сергійович',
-      role: 'SYSTEM_OWNER',
-      department: null,
-      passwordHash: ownerPasswordHash,
-      isActive: true,
-      createdById: null,
-    },
-    create: {
-      username: 'owner',
-      fullName: 'Левіс Артур Сергійович',
-      role: 'SYSTEM_OWNER',
-      department: null,
-      passwordHash: ownerPasswordHash,
-      isActive: true,
-      createdById: null,
-    },
-  });
+  const owner = await prisma.adminUser.findUnique({ where: { username: 'owner' } });
+  if (owner) {
+    await prisma.adminUser.update({
+      where: { username: 'owner' },
+      data: {
+        fullName: 'Левіс Артур Сергійович',
+        role: 'SYSTEM_OWNER',
+        department: null,
+        isActive: true,
+        createdById: null,
+      },
+    });
+  } else {
+    const ownerPasswordHash = await bcrypt.hash('owner12345', 10);
+    await prisma.adminUser.create({
+      data: {
+        username: 'owner',
+        fullName: 'Левіс Артур Сергійович',
+        role: 'SYSTEM_OWNER',
+        department: null,
+        passwordHash: ownerPasswordHash,
+        isActive: true,
+        mustChangePassword: true,
+        passwordChangedAt: null,
+        createdById: null,
+      },
+    });
+  }
   await prisma.adminUser.updateMany({
     where: { username: { in: ['superadmin1', 'superadmin2'] } },
     data: { isActive: false },

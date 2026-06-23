@@ -143,17 +143,35 @@ Content-Type: application/json
 ```
 
 ```http
-GET /api/audit
+GET /api/audit-logs
 Authorization: Bearer ADMIN_JWT
 ```
 
-Відповідь містить JWT і public-профіль адміністратора. Seed створює одного `SYSTEM_OWNER`: `owner / owner12345`. Цей пароль призначений лише для локального MVP/seed і має бути змінений у production.
+Відповідь містить JWT, `mustChangePassword` і public-профіль адміністратора. Seed створює одного `SYSTEM_OWNER`: `owner / owner12345`. Цей пароль призначений лише для локального MVP/seed; owner створюється з `mustChangePassword=true`.
 
 Ролі:
 
 - `SYSTEM_OWNER` — власник системи, бачить усі дані, створює `NATIONAL_ADMIN` і `REGIONAL_ADMIN`; не редагується і не деактивується через API/UI.
 - `NATIONAL_ADMIN` — бачить усю Україну, створює тільки `REGIONAL_ADMIN`.
 - `REGIONAL_ADMIN` — бачить і змінює тільки дані свого УПП; backend застосовує це обмеження до патрульних, автомобілів, маршрутних листів, місячних листів і audit logs.
+
+Додаткові endpoint-и безпеки:
+
+```http
+POST /api/admin/change-password
+POST /api/admin/2fa/setup
+POST /api/admin/2fa/enable
+POST /api/admin/2fa/verify
+PATCH /api/admin/users/:id/password
+PATCH /api/admin-users/:id/password
+POST /api/admin-users/:id/2fa/reset
+GET /api/admin/me
+POST /api/admin/logout
+```
+
+Адміністраторські паролі зберігаються тільки як bcrypt hash і не повертаються в API. Новий пароль має містити мінімум 12 символів, велику і малу літеру, цифру та спецсимвол. Після 5 невдалих спроб акаунт блокується на 15 хвилин; також діє базовий IP rate limit для admin login.
+
+2FA через Google Authenticator / TOTP є обов’язковою для `SYSTEM_OWNER`, `NATIONAL_ADMIN` і `REGIONAL_ADMIN`. `POST /api/admin/login` після правильного пароля повертає короткий `temporaryToken`; повний admin JWT видається тільки після `POST /api/admin/2fa/enable` або `POST /api/admin/2fa/verify`. TOTP secret не повертається у звичайних API responses і не логується.
 
 ## Налаштування
 
@@ -166,7 +184,9 @@ Authorization: Bearer ADMIN_JWT
 
 ```env
 JWT_SECRET="CHANGE_ME_SECRET"
-JWT_EXPIRES_IN="12h"
+ADMIN_JWT_EXPIRES_IN="2h"
+ADMIN_2FA_PENDING_EXPIRES_IN="5m"
+OFFICER_JWT_EXPIRES_IN="12h"
 ```
 
 У production `JWT_SECRET` обов’язково потрібно замінити на сильний секрет; сервер навмисно відмовляється стартувати з `CHANGE_ME_SECRET` у production mode.

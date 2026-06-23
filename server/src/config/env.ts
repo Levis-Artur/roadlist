@@ -20,7 +20,9 @@ export const env = {
   databaseUrl: process.env.DATABASE_URL ?? '',
   uploadDir: path.resolve(process.cwd(), process.env.UPLOAD_DIR ?? './uploads'),
   jwtSecret,
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '12h',
+  adminJwtExpiresIn: process.env.ADMIN_JWT_EXPIRES_IN ?? process.env.JWT_EXPIRES_IN ?? '2h',
+  adminTwoFactorPendingExpiresIn: process.env.ADMIN_2FA_PENDING_EXPIRES_IN ?? '5m',
+  officerJwtExpiresIn: process.env.OFFICER_JWT_EXPIRES_IN ?? process.env.JWT_EXPIRES_IN ?? '12h',
   nodeEnv,
   corsOrigin: process.env.CORS_ORIGIN ?? '*',
 };

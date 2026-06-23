@@ -1,8 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AdminRole, AdminUser } from '../types';
-import { adminRoleLabels, createAdminUser, deactivateAdminUser, getAdminUsers, updateAdminUser } from '../services/adminService';
+import { adminRoleLabels, createAdminUser, deactivateAdminUser, getAdminUsers, resetAdminPassword, resetAdminTwoFactor, updateAdminUser } from '../services/adminService';
 
 const emptyForm = { username: '', fullName: '', role: 'REGIONAL_ADMIN' as AdminRole, department: '', password: '', isActive: true };
+
+function formatDate(value?: string | null) {
+  return value ? new Date(value).toLocaleString('uk-UA') : '—';
+}
+
+function isLocked(item: AdminUser) {
+  return item.lockedUntil ? new Date(item.lockedUntil) > new Date() : false;
+}
 
 export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser }) {
   const [items, setItems] = useState<AdminUser[]>([]);
@@ -51,7 +59,10 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
         password: form.password.trim() || undefined,
         isActive: form.isActive,
       };
-      if (editing) await updateAdminUser(editing.id, payload);
+      if (editing) {
+        await updateAdminUser(editing.id, payload);
+        if (form.password.trim()) await resetAdminPassword(editing.id, form.password.trim());
+      }
       else await createAdminUser({ ...payload, password: form.password.trim() });
       setSuccess(editing ? 'Адміністратора оновлено.' : 'Адміністратора створено.');
       setOpen(false);
@@ -72,6 +83,17 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
     }
   }
 
+  async function reset2fa(item: AdminUser) {
+    if (!window.confirm(`Скинути 2FA для адміністратора ${item.username}? Після цього адміністратор має заново налаштувати Google Authenticator.`)) return;
+    try {
+      await resetAdminTwoFactor(item.id);
+      setSuccess('2FA скинуто. Адміністратор має заново налаштувати двофакторну автентифікацію.');
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Не вдалося скинути 2FA.');
+    }
+  }
+
   return (
     <section className="directory-panel">
       <div className="directory-toolbar">
@@ -81,17 +103,22 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
       {error && <p className="message error" role="alert">{error}</p>}
       {success && <p className="message success" role="status">{success}</p>}
       <div className="table-card"><div className="table-scroll"><table>
-        <thead><tr><th>Логін</th><th>ПІБ</th><th>Роль</th><th>УПП</th><th>Активний</th><th>Створено</th><th>Дії</th></tr></thead>
+        <thead><tr><th>Логін</th><th>ПІБ</th><th>Роль</th><th>УПП</th><th>Активний</th><th>2FA</th><th>Останній вхід</th><th>Зміна пароля</th><th>Тимчасовий пароль</th><th>Заблоковано до</th><th>Дії</th></tr></thead>
         <tbody>{items.map((item) => {
           const protectedOwner = item.role === 'SYSTEM_OWNER';
           return (
             <tr key={item.id}>
               <td>{item.username}</td><td>{item.fullName}</td><td>{adminRoleLabels[item.role]}</td><td>{item.department || '—'}</td>
               <td><span className={`status ${item.isActive ? 'completed' : 'needs_review'}`}>{item.isActive ? 'Так' : 'Ні'}</span></td>
-              <td>{item.createdAt ? new Date(item.createdAt).toLocaleString('uk-UA') : '—'}</td>
+              <td>{item.twoFactorEnabled ? <span className="meta-badge">Увімкнена</span> : <span className="meta-badge warning">Не увімкнена</span>}</td>
+              <td>{formatDate(item.lastLoginAt)}</td>
+              <td>{formatDate(item.passwordChangedAt)}</td>
+              <td>{item.mustChangePassword ? <span className="meta-badge warning">Потрібна зміна пароля</span> : '—'}</td>
+              <td>{isLocked(item) ? <span className="meta-badge warning">{formatDate(item.lockedUntil)}</span> : '—'}</td>
               <td className="row-actions">
                 {!protectedOwner && <button className="small-button" onClick={() => showForm(item)}>Редагувати</button>}
                 {!protectedOwner && item.isActive && <button className="small-button danger-outline" onClick={() => void deactivate(item)}>Деактивувати</button>}
+                {currentAdmin.role === 'SYSTEM_OWNER' && !protectedOwner && item.twoFactorEnabled && <button className="small-button danger-outline" onClick={() => void reset2fa(item)}>Скинути 2FA</button>}
                 {protectedOwner && <span className="meta-badge">Захищено</span>}
               </td>
             </tr>
@@ -105,7 +132,7 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
           <label>ПІБ<input value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required /></label>
           <label>Роль<select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as AdminRole })}>{availableRoles.map((role) => <option key={role} value={role}>{adminRoleLabels[role]}</option>)}</select></label>
           {form.role === 'REGIONAL_ADMIN' && <label>УПП<input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} required /></label>}
-          <label>{editing ? 'Новий пароль' : 'Пароль'}<input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required={!editing} /><small>{editing ? 'Залиште порожнім, якщо пароль не змінюється.' : 'Тимчасовий пароль для входу.'}</small></label>
+          <label>{editing ? 'Новий тимчасовий пароль' : 'Тимчасовий пароль'}<input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required={!editing} /><small>Це тимчасовий пароль. Після першого входу адміністратор повинен змінити його.</small></label>
           <label className="checkbox-filter"><input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />Активний</label>
         </div>
         {error && <p className="message error" role="alert">{error}</p>}

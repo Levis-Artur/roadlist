@@ -1,13 +1,18 @@
 import type { AdminRole, AdminUser } from '../types';
-import { apiDelete, apiGet, apiPatch, apiPost } from './apiClient';
+import { apiDelete, apiGet, apiPatch, apiPost, getApiUrl } from './apiClient';
 
 const ADMIN_TOKEN_KEY = 'admin_token';
+const ADMIN_PENDING_TOKEN_KEY = 'admin_2fa_pending_token';
 const ADMIN_SESSION_KEY = 'admin_user';
 const LEGACY_AUTH_KEY = 'admin_authenticated';
 
 interface AdminLoginResponse {
   success: boolean;
   token?: string;
+  temporaryToken?: string;
+  mustChangePassword?: boolean;
+  requiresTwoFactor?: boolean;
+  requiresTwoFactorSetup?: boolean;
   admin?: AdminUser;
 }
 
@@ -27,17 +32,30 @@ export const adminRoleLabels: Record<AdminRole, string> = {
   REGIONAL_ADMIN: 'Регіональний адміністратор',
 };
 
-export async function loginAdmin(username: string, password: string): Promise<boolean> {
+export async function loginAdmin(username: string, password: string): Promise<AdminLoginResponse> {
   const response = await apiPost<AdminLoginResponse>('/api/admin/login', { username, password });
-  if (!response.success || !response.token || !response.admin) return false;
-  sessionStorage.setItem(ADMIN_TOKEN_KEY, response.token);
-  sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(response.admin));
+  if (response.temporaryToken) sessionStorage.setItem(ADMIN_PENDING_TOKEN_KEY, response.temporaryToken);
+  if (response.token && response.admin) finishAdminLogin(response.token, response.admin);
   sessionStorage.removeItem(LEGACY_AUTH_KEY);
-  return true;
+  return response;
+}
+
+export function finishAdminLogin(token: string, admin: AdminUser): void {
+  sessionStorage.setItem(ADMIN_TOKEN_KEY, token);
+  sessionStorage.setItem(ADMIN_SESSION_KEY, JSON.stringify(admin));
+  sessionStorage.removeItem(ADMIN_PENDING_TOKEN_KEY);
 }
 
 export function logoutAdmin(): void {
+  const token = sessionStorage.getItem(ADMIN_TOKEN_KEY);
+  if (token) {
+    fetch(getApiUrl('/api/admin/logout'), {
+      method: 'POST',
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+    }).catch(() => undefined);
+  }
   sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+  sessionStorage.removeItem(ADMIN_PENDING_TOKEN_KEY);
   sessionStorage.removeItem(ADMIN_SESSION_KEY);
   sessionStorage.removeItem(LEGACY_AUTH_KEY);
 }
@@ -48,6 +66,11 @@ export function isAdminAuthenticated(): boolean {
 
 export function getAdminToken(): string | null {
   return sessionStorage.getItem(ADMIN_TOKEN_KEY);
+}
+
+function pendingAuthorizationHeader() {
+  const token = sessionStorage.getItem(ADMIN_PENDING_TOKEN_KEY);
+  return token ? { Authorization: `Bearer ${token}` } : undefined;
 }
 
 export function getCurrentAdmin(): AdminUser | null {
@@ -65,6 +88,59 @@ export function canManageAdminUsers(admin: AdminUser | null): boolean {
 export async function getAdminUsers(): Promise<AdminUser[]> {
   const response = await apiGet<AdminListResponse>('/api/admin/users');
   return response.admins;
+}
+
+export async function getMyAdminProfile(): Promise<AdminUser> {
+  return (await apiGet<AdminResponse>('/api/admin/me')).admin;
+}
+
+export async function changeOwnPassword(input: {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}): Promise<void> {
+  const token = sessionStorage.getItem(ADMIN_TOKEN_KEY) || sessionStorage.getItem(ADMIN_PENDING_TOKEN_KEY);
+  const response = await fetch(getApiUrl('/api/admin/change-password'), {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => undefined);
+    throw new Error(payload?.message || 'Не вдалося змінити пароль.');
+  }
+  logoutAdmin();
+}
+
+export async function setupTwoFactor(): Promise<{ qrCodeDataUrl: string; manualEntryKey: string; issuer: string; accountName: string }> {
+  const response = await fetch(getApiUrl('/api/admin/2fa/setup'), {
+    method: 'POST',
+    headers: { Accept: 'application/json', ...(pendingAuthorizationHeader() ?? {}) },
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload?.message || 'Не вдалося почати налаштування 2FA.');
+  return payload;
+}
+
+async function submitTwoFactor(path: string, code: string): Promise<AdminUser> {
+  const response = await fetch(getApiUrl(path), {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...(pendingAuthorizationHeader() ?? {}) },
+    body: JSON.stringify({ code }),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload?.message || 'Невірний код автентифікатора');
+  if (!payload.token || !payload.admin) throw new Error('Некоректна відповідь сервера 2FA.');
+  finishAdminLogin(payload.token, payload.admin);
+  return payload.admin;
+}
+
+export function enableTwoFactor(code: string): Promise<AdminUser> {
+  return submitTwoFactor('/api/admin/2fa/enable', code);
+}
+
+export function verifyTwoFactor(code: string): Promise<AdminUser> {
+  return submitTwoFactor('/api/admin/2fa/verify', code);
 }
 
 export async function createAdminUser(input: {
@@ -87,6 +163,14 @@ export async function updateAdminUser(id: string, input: Partial<{
   isActive: boolean;
 }>): Promise<AdminUser> {
   return (await apiPatch<AdminResponse>(`/api/admin/users/${encodeURIComponent(id)}`, input)).admin;
+}
+
+export async function resetAdminPassword(id: string, newTemporaryPassword: string): Promise<AdminUser> {
+  return (await apiPatch<AdminResponse>(`/api/admin/users/${encodeURIComponent(id)}/password`, { newTemporaryPassword })).admin;
+}
+
+export async function resetAdminTwoFactor(id: string): Promise<AdminUser> {
+  return (await apiPost<AdminResponse>(`/api/admin/users/${encodeURIComponent(id)}/2fa/reset`)).admin;
 }
 
 export async function deactivateAdminUser(id: string): Promise<void> {

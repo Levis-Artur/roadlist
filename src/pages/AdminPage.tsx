@@ -18,7 +18,7 @@ import {
 import type { AuditLog, MonthlyRouteSheet, Officer, RouteSheet, RouteSheetStatus, Vehicle } from '../types';
 import type { AdminUser } from '../types';
 import { findVehicleByNumber, formatVehicleLabel } from '../utils/vehicleDisplay';
-import { adminRoleLabels, canManageAdminUsers } from '../services/adminService';
+import { adminRoleLabels, canManageAdminUsers, changeOwnPassword, getMyAdminProfile } from '../services/adminService';
 
 const statusLabels: Record<RouteSheetStatus, string> = {
   active: 'Активна',
@@ -115,7 +115,7 @@ function StoredPhoto({ photoId, alt }: { photoId?: string; alt: string }) {
   return <div className="no-photo">{photoId ? 'Фото недоступне або було видалене.' : 'Фото відсутнє'}</div>;
 }
 
-type AdminSection = 'route_sheets' | 'monthly_route_sheets' | 'officers' | 'vehicles' | 'audit' | 'admins';
+type AdminSection = 'route_sheets' | 'monthly_route_sheets' | 'officers' | 'vehicles' | 'audit' | 'admins' | 'profile';
 
 export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () => void }) {
   const [section, setSection] = useState<AdminSection>('route_sheets');
@@ -137,6 +137,9 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
   const [loading, setLoading] = useState(true);
   const [officers, setOfficers] = useState<Officer[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [myProfile, setMyProfile] = useState<AdminUser>(admin);
+  const [profilePasswordForm, setProfilePasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [profileMessage, setProfileMessage] = useState('');
 
   async function refreshData() {
     setLoading(true);
@@ -145,6 +148,7 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
       const [sheets, monthlySheets, logs, officerItems, vehicleItems] = await Promise.all([
         getRouteSheets(), getMonthlyRouteSheets(), getAuditLogs(), getOfficers(), getVehicles(),
       ]);
+      getMyAdminProfile().then(setMyProfile).catch(() => undefined);
       setRouteSheets(Array.isArray(sheets) ? sheets : []);
       setMonthlyRouteSheets(Array.isArray(monthlySheets) ? monthlySheets : []);
       setAuditLogs(Array.isArray(logs) ? logs : []);
@@ -334,6 +338,18 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
     }
   }
 
+  async function submitProfilePassword(event: React.FormEvent) {
+    event.preventDefault();
+    setAdminError('');
+    try {
+      await changeOwnPassword(profilePasswordForm);
+      setProfileMessage('Пароль змінено. Увійдіть повторно з новим паролем.');
+      window.setTimeout(onLogout, 700);
+    } catch (caught) {
+      setAdminError(caught instanceof Error ? caught.message : 'Не вдалося змінити пароль.');
+    }
+  }
+
   function displayVehicle(vehicleNumber: string): string {
     return displayVehicleFromList(vehicles, vehicleNumber);
   }
@@ -360,6 +376,7 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
         <button className={section === 'officers' ? 'active' : ''} onClick={() => setSection('officers')}>Користувачі</button>
         <button className={section === 'vehicles' ? 'active' : ''} onClick={() => setSection('vehicles')}>Автомобілі</button>
         {canManageAdmins && <button className={section === 'admins' ? 'active' : ''} onClick={() => setSection('admins')}>Адміністратори</button>}
+        <button className={section === 'profile' ? 'active' : ''} onClick={() => setSection('profile')}>Мій профіль</button>
         <button className={section === 'audit' ? 'active' : ''} onClick={() => setSection('audit')}>Журнал дій</button>
       </nav>
 
@@ -370,6 +387,31 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
       {section === 'officers' && <OfficerDirectory />}
       {section === 'vehicles' && <VehicleDirectory />}
       {section === 'admins' && canManageAdmins && <AdminUsersDirectory currentAdmin={admin} />}
+      {section === 'profile' && (
+        <section className="panel">
+          <div className="section-heading"><div><span className="eyebrow">Безпека</span><h2>Мій профіль</h2></div></div>
+          <dl className="detail-grid">
+            <DetailItem label="ПІБ" value={myProfile.fullName} />
+            <DetailItem label="Логін" value={myProfile.username} />
+            <DetailItem label="Роль" value={adminRoleLabels[myProfile.role]} />
+            <DetailItem label="УПП" value={myProfile.department || '—'} />
+            <DetailItem label="Останній вхід" value={formatDate(myProfile.lastLoginAt ?? undefined)} />
+            <DetailItem label="Дата зміни пароля" value={formatDate(myProfile.passwordChangedAt ?? undefined)} />
+            <DetailItem label="Двофакторна автентифікація" value={myProfile.twoFactorEnabled ? 'Увімкнена' : 'Не увімкнена'} />
+            <DetailItem label="2FA увімкнено" value={formatDate(myProfile.twoFactorEnabledAt ?? undefined)} />
+          </dl>
+          <form className="admin-review-form" onSubmit={(event) => void submitProfilePassword(event)}>
+            <h3>Змінити пароль</h3>
+            <div className="form-grid">
+              <label>Поточний пароль<input type="password" value={profilePasswordForm.currentPassword} onChange={(event) => setProfilePasswordForm({ ...profilePasswordForm, currentPassword: event.target.value })} required /></label>
+              <label>Новий пароль<input type="password" value={profilePasswordForm.newPassword} onChange={(event) => setProfilePasswordForm({ ...profilePasswordForm, newPassword: event.target.value })} required /><small>Мінімум 12 символів: велика і мала літера, цифра та спецсимвол.</small></label>
+              <label>Повторити новий пароль<input type="password" value={profilePasswordForm.confirmPassword} onChange={(event) => setProfilePasswordForm({ ...profilePasswordForm, confirmPassword: event.target.value })} required /></label>
+            </div>
+            <button type="submit">Зберегти новий пароль</button>
+            {profileMessage && <p className="message success" role="status">{profileMessage}</p>}
+          </form>
+        </section>
+      )}
 
       <section className="stats-grid" aria-label="Статистика маршрутних листів" hidden={section !== 'route_sheets'}>
         <article><span>Всього листів</span><strong>{stats.total}</strong></article>

@@ -122,19 +122,32 @@ model OdometerPhoto {
 }
 
 model AdminUser {
-  id           String   @id @default(uuid())
-  username     String   @unique
-  fullName     String
-  role         String
-  department   String?
-  passwordHash String
-  isActive     Boolean  @default(true)
-  createdById  String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                  String    @id @default(uuid())
+  username            String    @unique
+  fullName            String
+  role                String
+  department          String?
+  passwordHash        String
+  isActive            Boolean   @default(true)
+  mustChangePassword  Boolean   @default(false)
+  passwordChangedAt   DateTime?
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  lastLoginAt         DateTime?
+  lastLoginIp         String?
+  twoFactorEnabled    Boolean   @default(false)
+  twoFactorSecret     String?
+  twoFactorEnabledAt  DateTime?
+  twoFactorLastVerifiedAt DateTime?
+  twoFactorRecoveryCodesHash String?
+  createdById         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@index([role, isActive])
   @@index([department, isActive])
+  @@index([lockedUntil])
+  @@index([twoFactorEnabled])
 }
 
 model AuditLog {

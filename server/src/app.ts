@@ -23,6 +23,7 @@ app.use('/api/officers', officerRouter);
 app.use('/api/route-sheets', routeSheetRouter);
 app.use('/api/photos', photoRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/admin-users', adminRouter);
 app.use('/api/audit-logs', auditRouter);
 app.use('/api/vehicles', vehicleRouter);
 app.use('/api/monthly-route-sheets', monthlyRouteSheetRouter);

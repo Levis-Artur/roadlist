@@ -7,6 +7,16 @@ export interface AdminTokenPayload {
   username: string;
   role: AdminRole;
   department?: string | null;
+  mustChangePassword?: boolean;
+}
+
+export interface AdminTwoFactorPendingPayload {
+  adminId: string;
+  username: string;
+  role: AdminRole;
+  department?: string | null;
+  purpose: 'ADMIN_2FA_PENDING';
+  mustChangePassword?: boolean;
 }
 
 export interface RequestMetadata {

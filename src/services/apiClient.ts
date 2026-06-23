@@ -31,6 +31,7 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
   const timeout = window.setTimeout(() => controller.abort(), 12_000);
   try {
     const adminOnlyPath = path.startsWith('/api/admin')
+      || path.startsWith('/api/admin-users')
       || (path.startsWith('/api/officers')
         && !path.startsWith('/api/officers/login')
         && !path.startsWith('/api/officers/logout')
@@ -59,6 +60,11 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
       ? await response.json() as { message?: string }
       : undefined;
     if (!response.ok) {
+      if (response.status === 401 && adminOnlyPath) {
+        sessionStorage.removeItem('admin_token');
+        sessionStorage.removeItem('admin_user');
+        window.dispatchEvent(new CustomEvent('admin-session-expired'));
+      }
       throw new ApiError(payload?.message || `Помилка API (${response.status}).`, response.status);
     }
     return payload as T;

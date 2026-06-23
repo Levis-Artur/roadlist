@@ -47,6 +47,17 @@ nano .env.production
 openssl rand -hex 32
 ```
 
+Для адміністративних сесій використовуйте `ADMIN_JWT_EXPIRES_IN=2h`, для патрульних — `OFFICER_JWT_EXPIRES_IN=12h`. Не відкривайте систему з персональними даними через публічний HTTP без HTTPS; Tailscale підходить для закритого тесту.
+
+Для TOTP / Google Authenticator на сервері має бути коректний час:
+
+```bash
+timedatectl
+sudo timedatectl set-ntp true
+```
+
+Якщо час на Debian-сервері неправильний, одноразові коди можуть не проходити перевірку.
+
 ## 5. Запуск
 
 ```bash

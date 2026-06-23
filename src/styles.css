@@ -211,6 +211,7 @@ tbody tr:hover { background: #d8e7f3; }
 .admin-login-card { width: min(100%, 420px); margin-top: 8vh; padding: 10px; }
 .login-titlebar { margin: -10px -10px 10px; padding: 7px 9px; background: var(--color-header); border-bottom: 1px solid var(--color-header-dark); color: #fff; font-size: 14px; font-weight: 700; }
 .admin-login-card > p:not(.message) { margin: 0 0 10px; color: var(--color-muted); font-size: 12px; }
+.qr-code { display: block; width: min(240px, 100%); margin: 10px auto; border: 1px solid var(--color-border); background: #fff; }
 
 .modal-backdrop { position: fixed; inset: 0; z-index: 20; padding: 12px; display: grid; place-items: center; background: rgba(15,39,66,.58); overflow: hidden; }
 .modal { width: min(760px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: calc(100vh - 24px); overflow: auto; padding: 10px; border: 1px solid #526f89; border-radius: var(--radius-xs); background: var(--color-panel); box-shadow: 0 3px 9px rgba(15,39,66,.28); }
