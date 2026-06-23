@@ -91,7 +91,7 @@ async function refreshMonthlyAggregates(tx: Prisma.TransactionClient, monthlyRou
   const entries = await tx.routeSheet.findMany({
     where: {
       monthlyRouteSheetId,
-      status: { in: ['completed', 'needs_review'] },
+      status: { in: ['completed', 'needs_review', 'verified'] },
       distanceKm: { not: null },
     },
     orderBy: [{ endedAt: 'asc' }, { updatedAt: 'asc' }],
@@ -263,4 +263,60 @@ export async function getRouteSheet(id: string) {
   const routeSheet = await prisma.routeSheet.findUnique({ where: { id } });
   if (!routeSheet) throw new AppError('Маршрутний лист не знайдено.', 404);
   return routeSheet;
+}
+
+export async function verifyRouteSheet(id: string, comment?: unknown, metadata: RequestMetadata = {}) {
+  const routeSheet = await prisma.routeSheet.findUnique({ where: { id } });
+  if (!routeSheet) throw new AppError('Маршрутний лист не знайдено.', 404);
+  if (routeSheet.status === 'active') throw new AppError('Неможливо перевірити активну незавершену зміну.', 400);
+  const updated = await prisma.$transaction(async (tx) => {
+    const item = await tx.routeSheet.update({
+      where: { id },
+      data: {
+        status: 'verified',
+        adminVerifiedAt: new Date(),
+        adminVerifiedBy: 'Адміністратор',
+        adminReviewComment: typeof comment === 'string' && comment.trim() ? comment.trim() : null,
+      },
+    });
+    if (item.monthlyRouteSheetId) await refreshMonthlyAggregates(tx, item.monthlyRouteSheetId);
+    return item;
+  });
+  await createAuditLog({
+    action: 'Маршрутний запис перевірено адміністратором',
+    entityType: 'route_sheet',
+    entityId: updated.id,
+    badgeNumber: updated.badgeNumber,
+    details: updated.adminReviewComment ?? undefined,
+    ...metadata,
+  });
+  return updated;
+}
+
+export async function markRouteSheetNeedsReview(id: string, comment?: unknown, metadata: RequestMetadata = {}) {
+  const routeSheet = await prisma.routeSheet.findUnique({ where: { id } });
+  if (!routeSheet) throw new AppError('Маршрутний лист не знайдено.', 404);
+  if (!['completed', 'verified', 'needs_review'].includes(routeSheet.status)) {
+    throw new AppError('Повернути на перевірку можна тільки завершену, перевірену або вже проблемну зміну.', 400);
+  }
+  const updated = await prisma.$transaction(async (tx) => {
+    const item = await tx.routeSheet.update({
+      where: { id },
+      data: {
+        status: 'needs_review',
+        adminReviewComment: typeof comment === 'string' && comment.trim() ? comment.trim() : null,
+      },
+    });
+    if (item.monthlyRouteSheetId) await refreshMonthlyAggregates(tx, item.monthlyRouteSheetId);
+    return item;
+  });
+  await createAuditLog({
+    action: 'Маршрутний запис повернено на перевірку',
+    entityType: 'route_sheet',
+    entityId: updated.id,
+    badgeNumber: updated.badgeNumber,
+    details: updated.adminReviewComment ?? undefined,
+    ...metadata,
+  });
+  return updated;
 }

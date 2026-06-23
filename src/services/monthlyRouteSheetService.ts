@@ -38,7 +38,7 @@ function localMonthlyRouteSheets(filters: MonthlyRouteSheetFilters = {}): Monthl
     const first = sorted[0];
     const date = new Date(first.startedAt || first.createdAt);
     const key = `${first.vehicleNumber}-${date.getFullYear()}-${date.getMonth() + 1}`;
-    const completed = sorted.filter((item) => item.status === 'completed' || item.status === 'needs_review');
+    const completed = sorted.filter((item) => item.status === 'completed' || item.status === 'needs_review' || item.status === 'verified');
     const lastCompleted = [...completed].reverse().find((item) => item.endOdometer !== undefined);
     const item: MonthlyRouteSheet = {
       id: first.monthlyRouteSheetId || `local-monthly-${key}`,

@@ -31,6 +31,9 @@ function normalizeRouteSheet(routeSheet: RouteSheet): RouteSheet {
     endManualEntry: routeSheet.endManualEntry ?? undefined,
     refueled: routeSheet.refueled ?? false,
     fuelLiters: routeSheet.fuelLiters ?? undefined,
+    adminVerifiedAt: routeSheet.adminVerifiedAt ?? undefined,
+    adminVerifiedBy: routeSheet.adminVerifiedBy ?? undefined,
+    adminReviewComment: routeSheet.adminReviewComment ?? undefined,
     endedAt: routeSheet.endedAt ?? undefined,
   };
 }
@@ -218,6 +221,58 @@ export async function finishShift(input: FinishShiftInput): Promise<RouteSheet> 
     if (error instanceof ApiError && error.status === 401) throw new Error('Сесія завершилась. Увійдіть повторно.');
     if (!isApiUnavailableError(error)) throw error;
     return finishShiftLocally(input);
+  }
+}
+
+export async function verifyRouteSheet(id: string, comment?: string): Promise<RouteSheet> {
+  try {
+    const routeSheet = extractEntity<RouteSheet>(
+      await apiPost<unknown>(`/api/route-sheets/${encodeURIComponent(id)}/verify`, { comment }),
+      'routeSheet',
+    );
+    if (!routeSheet) throw new Error('Не вдалося позначити запис як перевірений.');
+    return normalizeRouteSheet(routeSheet);
+  } catch (error) {
+    if (!isApiUnavailableError(error)) throw error;
+    const routeSheet = routeSheetStorage.getAll().find((item) => item.id === id);
+    if (!routeSheet) throw new Error('Маршрутний лист не знайдено.');
+    if (routeSheet.status === 'active') throw new Error('Неможливо перевірити активну незавершену зміну.');
+    const updated: RouteSheet = {
+      ...routeSheet,
+      status: 'verified',
+      adminVerifiedAt: new Date().toISOString(),
+      adminVerifiedBy: 'Адміністратор',
+      adminReviewComment: comment?.trim() || null,
+      updatedAt: new Date().toISOString(),
+    };
+    routeSheetStorage.update(updated);
+    await localAudit('Маршрутний запис перевірено адміністратором', updated, updated.adminReviewComment ?? undefined);
+    return updated;
+  }
+}
+
+export async function markRouteSheetNeedsReview(id: string, comment?: string): Promise<RouteSheet> {
+  try {
+    const routeSheet = extractEntity<RouteSheet>(
+      await apiPost<unknown>(`/api/route-sheets/${encodeURIComponent(id)}/mark-needs-review`, { comment }),
+      'routeSheet',
+    );
+    if (!routeSheet) throw new Error('Не вдалося повернути запис на перевірку.');
+    return normalizeRouteSheet(routeSheet);
+  } catch (error) {
+    if (!isApiUnavailableError(error)) throw error;
+    const routeSheet = routeSheetStorage.getAll().find((item) => item.id === id);
+    if (!routeSheet) throw new Error('Маршрутний лист не знайдено.');
+    if (!['completed', 'verified', 'needs_review'].includes(routeSheet.status)) throw new Error('Повернути на перевірку можна тільки завершену, перевірену або вже проблемну зміну.');
+    const updated: RouteSheet = {
+      ...routeSheet,
+      status: 'needs_review',
+      adminReviewComment: comment?.trim() || null,
+      updatedAt: new Date().toISOString(),
+    };
+    routeSheetStorage.update(updated);
+    await localAudit('Маршрутний запис повернено на перевірку', updated, updated.adminReviewComment ?? undefined);
+    return updated;
   }
 }
 

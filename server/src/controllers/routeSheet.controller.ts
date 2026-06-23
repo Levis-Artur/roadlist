@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { finishShift, getRouteSheet, listRouteSheets, startShift } from '../services/routeSheet.service.js';
+import { finishShift, getRouteSheet, listRouteSheets, markRouteSheetNeedsReview, startShift, verifyRouteSheet } from '../services/routeSheet.service.js';
 import type { FinishShiftInput, RouteSheetFilters, StartShiftInput } from '../types/index.js';
 
 function metadata(request: Request) {
@@ -41,6 +41,22 @@ export async function listRouteSheetsController(request: Request, response: Resp
 export async function getRouteSheetController(request: Request, response: Response, next: NextFunction) {
   try {
     response.json({ success: true, routeSheet: await getRouteSheet(request.params.id) });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function verifyRouteSheetController(request: Request, response: Response, next: NextFunction) {
+  try {
+    response.json({ success: true, routeSheet: await verifyRouteSheet(request.params.id, request.body?.comment, metadata(request)) });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function markRouteSheetNeedsReviewController(request: Request, response: Response, next: NextFunction) {
+  try {
+    response.json({ success: true, routeSheet: await markRouteSheetNeedsReview(request.params.id, request.body?.comment, metadata(request)) });
   } catch (error) {
     next(error);
   }

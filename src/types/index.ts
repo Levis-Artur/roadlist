@@ -13,7 +13,7 @@ export interface OfficerFilters { search?: string; department?: string; isActive
 export interface CreateOfficerInput { badgeNumber: string; fullName: string; department: string; pin: string; isActive: boolean }
 export type UpdateOfficerInput = Partial<CreateOfficerInput>;
 
-export type RouteSheetStatus = 'active' | 'completed' | 'needs_review';
+export type RouteSheetStatus = 'active' | 'completed' | 'needs_review' | 'verified';
 
 export interface RouteSheetFilters {
   status?: RouteSheetStatus;
@@ -67,6 +67,9 @@ export interface RouteSheet {
   endManualEntry?: boolean;
   refueled?: boolean;
   fuelLiters?: number | null;
+  adminVerifiedAt?: string | null;
+  adminVerifiedBy?: string | null;
+  adminReviewComment?: string | null;
   status: RouteSheetStatus;
   startedAt: string;
   endedAt?: string;

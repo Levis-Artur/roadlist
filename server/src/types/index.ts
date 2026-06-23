@@ -1,4 +1,4 @@
-export type RouteSheetStatus = 'active' | 'completed' | 'needs_review';
+export type RouteSheetStatus = 'active' | 'completed' | 'needs_review' | 'verified';
 export type PhotoType = 'start' | 'end';
 
 export interface RequestMetadata {

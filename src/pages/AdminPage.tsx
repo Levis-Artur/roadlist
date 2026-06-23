@@ -3,7 +3,7 @@ import { OfficerDirectory } from '../components/OfficerDirectory';
 import { VehicleDirectory } from '../components/VehicleDirectory';
 import { addAuditLog, clearAuditLogs, getAuditLogs } from '../services/auditService';
 import { clearOdometerPhotos, getOdometerPhoto } from '../services/photoService';
-import { clearRouteSheets, getRouteSheetById, getRouteSheets } from '../services/routeSheetService';
+import { clearRouteSheets, getRouteSheetById, getRouteSheets, markRouteSheetNeedsReview, verifyRouteSheet } from '../services/routeSheetService';
 import { getOfficers } from '../services/officerService';
 import { getVehicles } from '../services/vehicleService';
 import {
@@ -18,8 +18,9 @@ import { findVehicleByNumber, formatVehicleLabel } from '../utils/vehicleDisplay
 
 const statusLabels: Record<RouteSheetStatus, string> = {
   active: 'Активна',
-  completed: 'Завершено',
+  completed: 'Завершена',
   needs_review: 'Потребує перевірки',
+  verified: 'Перевірено',
 };
 
 const monthlyStatusLabels: Record<string, string> = {
@@ -55,6 +56,7 @@ function exportCsv(routeSheets: RouteSheet[]) {
     'Дата', 'ПІБ', 'Номер жетона', 'УПП', 'Номер екіпажу / підрозділу',
     'Номер автомобіля', 'Початковий кілометраж', 'Кінцевий кілометраж', 'Пробіг',
     'Статус', 'Ручне внесення початку', 'Ручне внесення кінця', 'Час початку', 'Час завершення',
+    'Дата перевірки адміністратором', 'Перевірив', 'Коментар адміністратора',
   ];
   const rows = routeSheets.map((item) => [
     formatDate(item.createdAt, true), item.fullName, item.badgeNumber, item.department,
@@ -62,6 +64,9 @@ function exportCsv(routeSheets: RouteSheet[]) {
     statusLabels[item.status], item.startManualEntry ? 'Так' : 'Ні',
     item.endManualEntry === undefined ? '' : item.endManualEntry ? 'Так' : 'Ні',
     formatDate(item.startedAt), item.endedAt ? formatDate(item.endedAt) : '',
+    item.adminVerifiedAt ? formatDate(item.adminVerifiedAt) : '—',
+    item.adminVerifiedBy || '—',
+    item.adminReviewComment || '—',
   ]);
   const csv = `\uFEFF${[headers, ...rows].map((row) => row.map(csvCell).join(';')).join('\r\n')}`;
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -107,6 +112,9 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
   const [selected, setSelected] = useState<RouteSheet>();
   const [selectedMonthly, setSelectedMonthly] = useState<MonthlyRouteSheet>();
   const [printMonthly, setPrintMonthly] = useState<MonthlyRouteSheet>();
+  const [reviewAction, setReviewAction] = useState<'verify' | 'needs_review' | null>(null);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | RouteSheetStatus>('all');
   const [adminError, setAdminError] = useState('');
@@ -156,6 +164,7 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
     active: routeSheets.filter((item) => item.status === 'active').length,
     completed: routeSheets.filter((item) => item.status === 'completed').length,
     needsReview: routeSheets.filter((item) => item.status === 'needs_review').length,
+    verified: routeSheets.filter((item) => item.status === 'verified').length,
     distance: routeSheets.reduce((sum, item) => sum + (item.distanceKm ?? 0), 0),
     activeOfficers: officers.filter((item) => item.isActive !== false).length,
     activeVehicles: vehicles.filter((item) => item.isActive).length,
@@ -178,10 +187,53 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
       setSelected(undefined);
       setSelectedMonthly(undefined);
       setPrintMonthly(undefined);
-      setAdminError('');
-      onLogout();
+    setAdminError('');
+    onLogout();
     } catch {
       setAdminError('Не вдалося зберегти дані. Перевірте налаштування браузера або очистіть тестові дані.');
+    }
+  }
+
+  function updateRouteSheetInState(routeSheet: RouteSheet) {
+    setRouteSheets((items) => items.map((item) => (item.id === routeSheet.id ? routeSheet : item)));
+    setSelected(routeSheet);
+    setSelectedMonthly((monthly) => monthly
+      ? {
+          ...monthly,
+          shiftEntries: monthly.shiftEntries?.map((entry) => (entry.id === routeSheet.id ? routeSheet : entry)),
+        }
+      : monthly);
+    setPrintMonthly((monthly) => monthly
+      ? {
+          ...monthly,
+          shiftEntries: monthly.shiftEntries?.map((entry) => (entry.id === routeSheet.id ? routeSheet : entry)),
+        }
+      : monthly);
+  }
+
+  function openReviewAction(action: 'verify' | 'needs_review') {
+    setReviewAction(action);
+    setReviewComment(selected?.adminReviewComment ?? '');
+    setAdminError('');
+  }
+
+  async function submitReviewAction(event: React.FormEvent) {
+    event.preventDefault();
+    if (!selected || !reviewAction) return;
+    setReviewSubmitting(true);
+    try {
+      const updated = reviewAction === 'verify'
+        ? await verifyRouteSheet(selected.id, reviewComment)
+        : await markRouteSheetNeedsReview(selected.id, reviewComment);
+      updateRouteSheetInState(updated);
+      setReviewAction(null);
+      setReviewComment('');
+      setAdminError('');
+      void refreshData();
+    } catch (caught) {
+      setAdminError(caught instanceof Error ? caught.message : 'Не вдалося виконати адміністративну дію.');
+    } finally {
+      setReviewSubmitting(false);
     }
   }
 
@@ -268,6 +320,7 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
         <article><span>Активні зміни</span><strong>{stats.active}</strong></article>
         <article><span>Завершені</span><strong>{stats.completed}</strong></article>
         <article className="warning-stat"><span>Потребують перевірки</span><strong>{stats.needsReview}</strong></article>
+        <article><span>Перевірено</span><strong>{stats.verified}</strong></article>
         <article><span>Сумарний пробіг</span><strong>{stats.distance.toLocaleString('uk-UA')} <small>км</small></strong></article>
         <article><span>Активні патрульні</span><strong>{stats.activeOfficers}</strong></article>
         <article><span>Активні автомобілі</span><strong>{stats.activeVehicles}</strong></article>
@@ -280,7 +333,7 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
         <label>Статус
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | RouteSheetStatus)}>
             <option value="all">Всі</option><option value="active">Активні</option>
-            <option value="completed">Завершені</option><option value="needs_review">Потребують перевірки</option>
+            <option value="completed">Завершені</option><option value="needs_review">Потребують перевірки</option><option value="verified">Перевірено</option>
           </select>
         </label>
       </section>
@@ -309,7 +362,7 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
                   <td><span className={`status ${item.status}`}>{statusLabels[item.status]}</span></td>
                   <td><span className={`meta-badge ${item.startManualEntry || item.endManualEntry ? 'manual' : ''}`}>{item.startManualEntry || item.endManualEntry ? 'Так' : 'Ні'}</span></td><td>{item.status === 'needs_review' ? 'Так' : 'Ні'}</td>
                   <td>{formatDate(item.startedAt)}</td><td>{formatDate(item.endedAt)}</td>
-                  <td><button type="button" className="small-button" onClick={() => void openDetails(item.id)}>Деталі</button></td>
+                  <td><button type="button" className="small-button" onClick={() => void openDetails(item.id)}>{item.status === 'needs_review' ? 'Перевірити' : 'Деталі'}</button></td>
                 </tr>
               ))}</tbody>
             </table>
@@ -391,6 +444,30 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
               <DetailItem label="Спосіб внесення в кінці" value={selected.endManualEntry === undefined ? '—' : selected.endManualEntry ? 'Внесено вручну' : '—'} />
               <DetailItem label="Статус" value={<span className={`status ${selected.status}`}>{statusLabels[selected.status]}</span>} />
             </dl>
+            <section className="admin-review-box">
+              <div className="section-heading inline-heading"><div><span className="eyebrow">Адміністративна перевірка</span><h3>Стан перевірки</h3></div></div>
+              <dl className="detail-grid">
+                <DetailItem label="Поточний статус" value={<span className={`status ${selected.status}`}>{statusLabels[selected.status]}</span>} />
+                <DetailItem label="Дата перевірки" value={formatDate(selected.adminVerifiedAt ?? undefined)} />
+                <DetailItem label="Ким перевірено" value={selected.adminVerifiedBy || '—'} />
+                <DetailItem label="Коментар адміністратора" value={selected.adminReviewComment || '—'} />
+              </dl>
+              <div className="button-row compact-row">
+                {(selected.status === 'completed' || selected.status === 'needs_review') && (
+                  <button type="button" className="small-button" onClick={() => openReviewAction('verify')}>Позначити як перевірено</button>
+                )}
+                {selected.status === 'needs_review' && (
+                  <button type="button" className="small-button secondary" onClick={() => openReviewAction('needs_review')}>Залишити коментар</button>
+                )}
+                {selected.status === 'verified' && (
+                  <>
+                    <span className="message success compact-message">Перевірено адміністратором</span>
+                    <button type="button" className="small-button danger-mini" onClick={() => openReviewAction('needs_review')}>Повернути на перевірку</button>
+                  </>
+                )}
+                {selected.status === 'active' && <span className="field-hint">Активну незавершену зміну не можна перевірити.</span>}
+              </div>
+            </section>
             <div className="photo-grid detail-photos">
               <figure><figcaption>Фото на початку зміни</figcaption><StoredPhoto photoId={selected.startPhotoId} alt="Одометр на початку зміни" /></figure>
               <figure><figcaption>Фото наприкінці зміни</figcaption><StoredPhoto photoId={selected.endPhotoId} alt="Одометр наприкінці зміни" /></figure>
@@ -438,6 +515,28 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
         </div>
       )}
 
+      {selected && reviewAction && (
+        <div className="modal-backdrop review-modal-backdrop" onMouseDown={() => setReviewAction(null)}>
+          <form className="modal review-modal" onSubmit={(event) => void submitReviewAction(event)} onMouseDown={(event) => event.stopPropagation()}>
+            <div className="section-heading"><div><span className="eyebrow">Адміністративна перевірка</span><h2>{reviewAction === 'verify' ? 'Позначити як перевірено' : 'Повернути на перевірку'}</h2></div></div>
+            <label>
+              Коментар адміністратора
+              <textarea
+                value={reviewComment}
+                onChange={(event) => setReviewComment(event.target.value)}
+                placeholder={reviewAction === 'verify'
+                  ? 'Наприклад: Кілометраж звірено з фото одометра.'
+                  : 'Наприклад: Потрібно додатково перевірити показник кінцевого одометра.'}
+              />
+            </label>
+            <div className="modal-actions">
+              <button type="submit" disabled={reviewSubmitting}>{reviewSubmitting ? 'Зберігаємо...' : reviewAction === 'verify' ? 'Підтвердити перевірку' : 'Залишити на перевірці'}</button>
+              <button type="button" className="secondary" disabled={reviewSubmitting} onClick={() => setReviewAction(null)}>Скасувати</button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {printMonthly && (
         <div className="modal-backdrop print-modal-backdrop" onMouseDown={() => setPrintMonthly(undefined)}>
           <section className="modal print-modal" role="dialog" aria-modal="true" aria-label="Друк місячного маршрутного листа" onMouseDown={(event) => event.stopPropagation()}>
@@ -461,14 +560,15 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
               <table className="print-table">
                 <thead><tr>
                   <th>№</th><th>Дата</th><th>Патрульний</th><th>Жетон</th><th>Початок зміни</th><th>Завершення зміни</th>
-                  <th>Початковий км</th><th>Кінцевий км</th><th>Пробіг</th><th>Заправка, л</th><th>Примітка</th>
+                  <th>Початковий км</th><th>Кінцевий км</th><th>Пробіг</th><th>Заправка, л</th><th>Перевірка</th><th>Примітка</th>
                 </tr></thead>
                 <tbody>{(printMonthly.shiftEntries ?? []).map((entry, index) => (
                   <tr key={entry.id}>
                     <td>{index + 1}</td><td>{formatDate(entry.startedAt, true)}</td><td>{entry.fullName}</td><td>{entry.badgeNumber}</td>
                     <td>{formatDate(entry.startedAt)}</td><td>{formatDate(entry.endedAt)}</td><td>{entry.startOdometer}</td>
                     <td>{entry.endOdometer ?? '—'}</td><td>{entry.distanceKm ?? '—'}</td><td>{entry.refueled ? entry.fuelLiters ?? '—' : '—'}</td>
-                    <td>{entry.status === 'needs_review' ? 'Потребує перевірки' : ''}</td>
+                    <td>{entry.status === 'verified' ? 'Перевірено' : entry.status === 'needs_review' ? 'Потребує перевірки' : '—'}</td>
+                    <td>{entry.adminReviewComment || ''}</td>
                   </tr>
                 ))}</tbody>
               </table>

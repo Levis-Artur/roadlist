@@ -87,6 +87,9 @@ model RouteSheet {
   endManualEntry       Boolean?
   refueled             Boolean                   @default(false)
   fuelLiters           Float?
+  adminVerifiedAt      DateTime?
+  adminVerifiedBy      String?
+  adminReviewComment   String?
   status               String
   startedAt            DateTime
   endedAt              DateTime?
