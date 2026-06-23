@@ -23,6 +23,8 @@ export function PatrolPage() {
   const [checkingBadge, setCheckingBadge] = useState(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loadingVehicles, setLoadingVehicles] = useState(false);
+  const [refueled, setRefueled] = useState(false);
+  const [fuelLiters, setFuelLiters] = useState('');
 
   async function checkBadge(event: React.FormEvent) {
     event.preventDefault();
@@ -70,7 +72,9 @@ export function PatrolPage() {
       }
       const availableVehicles = await getAvailableVehicles();
       setVehicles(availableVehicles);
-      if (availableVehicles.length === 1) automaticVehicleNumber = availableVehicles[0].plateNumber;
+      if (availableVehicles.length === 1 && (nextFlow === 'end' || availableVehicles[0].availability?.status !== 'busy')) {
+        automaticVehicleNumber = availableVehicles[0].plateNumber;
+      }
       if (!availableVehicles.length) {
         setError('Немає активних автомобілів. Зверніться до адміністратора або додайте автомобіль в адмін-панелі.');
         setFlow('idle');
@@ -85,6 +89,8 @@ export function PatrolPage() {
     setFlow(nextFlow);
     setCrewNumber('');
     setVehicleNumber(automaticVehicleNumber);
+    setRefueled(false);
+    setFuelLiters('');
     setMessage('');
     setError('');
     setActiveSheet(undefined);
@@ -98,6 +104,8 @@ export function PatrolPage() {
     setFlow('idle');
     setCrewNumber('');
     setVehicleNumber('');
+    setRefueled(false);
+    setFuelLiters('');
     setActiveSheet(undefined);
     setVehicles([]);
   }
@@ -105,6 +113,11 @@ export function PatrolPage() {
   function displayVehicle(vehicleNumberValue: string): string {
     const vehicle = findVehicleByNumber(vehicles, vehicleNumberValue);
     return vehicle ? formatVehicleLabel(vehicle) : vehicleNumberValue;
+  }
+
+  function vehicleOptionLabel(vehicle: Vehicle): string {
+    const status = vehicle.availability?.status === 'busy' ? 'Зайнятий: зміна не завершена' : 'Доступний';
+    return `${formatVehicleLabel(vehicle)} — ${status}`;
   }
 
   async function saveOdometer(result: OdometerResult): Promise<string | undefined> {
@@ -117,6 +130,10 @@ export function PatrolPage() {
     if (!officer) return fail('Спочатку перевірте номер жетона.');
     try {
       if (flow === 'start') {
+        const selectedVehicle = findVehicleByNumber(vehicles, vehicleNumber) ?? (vehicles.length === 1 ? vehicles[0] : undefined);
+        if (selectedVehicle?.availability?.status === 'busy') {
+          return fail('Цей автомобіль вже використовується в активній зміні. Почати нову зміну неможливо до завершення попередньої.');
+        }
         await startShift({
           officer,
           crewNumber,
@@ -127,6 +144,12 @@ export function PatrolPage() {
         });
         setMessage('Зміну розпочато. Початковий кілометраж збережено.');
       } else if (flow === 'end') {
+        const normalizedFuelLiters = fuelLiters.trim().replace(',', '.');
+        const parsedFuelLiters = normalizedFuelLiters ? Number(normalizedFuelLiters) : undefined;
+        if (refueled && !normalizedFuelLiters) return fail('Вкажіть кількість літрів заправки.');
+        if (refueled && (!Number.isFinite(parsedFuelLiters) || Number(parsedFuelLiters) <= 0)) {
+          return fail('Кількість літрів має бути числом більше 0.');
+        }
         const completed = await finishShift({
           badgeNumber: officer.badgeNumber,
           crewNumber,
@@ -134,6 +157,8 @@ export function PatrolPage() {
           endOdometer: result.value,
           endPhotoId: result.photoId,
           endManualEntry: true,
+          refueled,
+          fuelLiters: refueled ? parsedFuelLiters : null,
         });
         setMessage(`Зміну завершено. Пробіг за зміну: ${completed.distanceKm} км.${completed.status === 'needs_review' ? ' Запис потребує перевірки.' : ''}`);
       } else {
@@ -242,7 +267,10 @@ export function PatrolPage() {
             {vehicles.length === 1 ? (
               <div className="readonly-field">
                 <span>Службовий автомобіль</span>
-                <strong>{formatVehicleLabel(vehicles[0])}</strong>
+                <strong>{vehicleOptionLabel(vehicles[0])}</strong>
+                {flow === 'start' && vehicles[0].availability?.status === 'busy' && (
+                  <small className="field-hint">Цей автомобіль вже використовується в активній зміні.</small>
+                )}
               </div>
             ) : (
               <label>
@@ -250,7 +278,9 @@ export function PatrolPage() {
                 <select value={vehicleNumber} onChange={(event) => setVehicleNumber(event.target.value)}>
                   <option value="">Оберіть автомобіль</option>
                   {vehicles.map((vehicle) => (
-                    <option key={vehicle.id} value={vehicle.plateNumber}>{formatVehicleLabel(vehicle)}</option>
+                    <option key={vehicle.id} value={vehicle.plateNumber} disabled={flow === 'start' && vehicle.availability?.status === 'busy'}>
+                      {vehicleOptionLabel(vehicle)}
+                    </option>
                   ))}
                 </select>
               </label>
@@ -260,7 +290,29 @@ export function PatrolPage() {
               onSubmit={saveOdometer}
               submitLabel={flow === 'start' ? 'Почати зміну' : 'Завершити зміну'}
               type={flow}
-            />
+            >
+              {flow === 'end' && (
+                <fieldset className="fuel-fieldset">
+                  <legend>Заправка автомобіля</legend>
+                  <div className="radio-row">
+                    <label><input type="radio" name="refueled" checked={!refueled} onChange={() => { setRefueled(false); setFuelLiters(''); }} /> Ні</label>
+                    <label><input type="radio" name="refueled" checked={refueled} onChange={() => setRefueled(true)} /> Так</label>
+                  </div>
+                  {refueled && (
+                    <label>
+                      Кількість літрів
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={fuelLiters}
+                        onChange={(event) => setFuelLiters(event.target.value)}
+                        placeholder="Наприклад, 25.5"
+                      />
+                    </label>
+                  )}
+                </fieldset>
+              )}
+            </OdometerInput>
           </section>
         )}
 

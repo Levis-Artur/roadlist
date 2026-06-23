@@ -1,3 +1,5 @@
+import { generateId } from '../utils/generateId';
+
 const DB_NAME = 'route-sheet-photo-db';
 const STORE_NAME = 'odometer-photos';
 const DB_VERSION = 1;
@@ -53,7 +55,7 @@ function fileToDataUrl(file: File): Promise<string> {
 
 export async function savePhoto(fileOrDataUrl: File | string, expiresAt?: string): Promise<string> {
   const dataUrl = fileOrDataUrl instanceof File ? await fileToDataUrl(fileOrDataUrl) : fileOrDataUrl;
-  const id = crypto.randomUUID();
+  const id = generateId('photo');
   const database = await initPhotoDb();
   const transaction = database.transaction(STORE_NAME, 'readwrite');
   const createdAt = new Date();

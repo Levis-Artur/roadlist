@@ -28,8 +28,16 @@ export interface Vehicle {
   model: string;
   department: string;
   isActive: boolean;
+  availability?: VehicleAvailability;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface VehicleAvailability {
+  status: 'available' | 'busy';
+  activeShiftId: string | null;
+  occupiedBy: string | null;
+  startedAt: string | null;
 }
 
 export interface VehicleFilters { search?: string; department?: string; isActive?: boolean }
@@ -38,11 +46,16 @@ export type UpdateVehicleInput = Partial<CreateVehicleInput>;
 
 export interface RouteSheet {
   id: string;
+  monthlyRouteSheetId?: string | null;
   badgeNumber: string;
   fullName: string;
   department: string;
   crewNumber?: string | null;
+  vehicleId?: string | null;
   vehicleNumber: string;
+  displayVehicleNumber?: string | null;
+  vehicleBrand?: string | null;
+  vehicleModel?: string | null;
   startOdometer: number;
   endOdometer?: number;
   distanceKm?: number;
@@ -52,6 +65,8 @@ export interface RouteSheet {
   endOcrValue?: number;
   startManualEntry: boolean;
   endManualEntry?: boolean;
+  refueled?: boolean;
+  fuelLiters?: number | null;
   status: RouteSheetStatus;
   startedAt: string;
   endedAt?: string;
@@ -84,6 +99,44 @@ export interface FinishShiftInput {
   endPhotoId?: string;
   endOcrValue?: number;
   endManualEntry: boolean;
+  refueled?: boolean;
+  fuelLiters?: number | null;
+}
+
+export type MonthlyRouteSheetStatus = 'open' | 'closed' | 'archived';
+
+export interface MonthlyRouteSheet {
+  id: string;
+  vehicleId: string;
+  vehicleNumber: string;
+  displayVehicleNumber?: string | null;
+  vehicleBrand: string;
+  vehicleModel: string;
+  department: string;
+  year: number;
+  month: number;
+  status: MonthlyRouteSheetStatus;
+  openingOdometer?: number | null;
+  closingOdometer?: number | null;
+  totalDistanceKm: number;
+  totalFuelLiters: number;
+  printedAt?: string | null;
+  closedAt?: string | null;
+  archivedAt?: string | null;
+  adminCheckedBy?: string | null;
+  adminComment?: string | null;
+  shiftCount?: number;
+  shiftEntries?: RouteSheet[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MonthlyRouteSheetFilters {
+  year?: number;
+  month?: number;
+  vehicleId?: string;
+  status?: MonthlyRouteSheetStatus;
+  department?: string;
 }
 
 export interface AuditLog {

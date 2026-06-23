@@ -6,7 +6,14 @@ import { clearOdometerPhotos, getOdometerPhoto } from '../services/photoService'
 import { clearRouteSheets, getRouteSheetById, getRouteSheets } from '../services/routeSheetService';
 import { getOfficers } from '../services/officerService';
 import { getVehicles } from '../services/vehicleService';
-import type { AuditLog, Officer, RouteSheet, RouteSheetStatus, Vehicle } from '../types';
+import {
+  closeMonthlyRouteSheet,
+  getMonthlyRouteSheetById,
+  getMonthlyRouteSheetPrintData,
+  getMonthlyRouteSheets,
+  markMonthlyRouteSheetPrinted,
+} from '../services/monthlyRouteSheetService';
+import type { AuditLog, MonthlyRouteSheet, Officer, RouteSheet, RouteSheetStatus, Vehicle } from '../types';
 import { findVehicleByNumber, formatVehicleLabel } from '../utils/vehicleDisplay';
 
 const statusLabels: Record<RouteSheetStatus, string> = {
@@ -14,6 +21,17 @@ const statusLabels: Record<RouteSheetStatus, string> = {
   completed: 'Завершено',
   needs_review: 'Потребує перевірки',
 };
+
+const monthlyStatusLabels: Record<string, string> = {
+  open: 'Відкритий',
+  closed: 'Закритий',
+  archived: 'Архівний',
+};
+
+const monthNames = [
+  'січень', 'лютий', 'березень', 'квітень', 'травень', 'червень',
+  'липень', 'серпень', 'вересень', 'жовтень', 'листопад', 'грудень',
+];
 
 function displayVehicleFromList(vehicles: Vehicle[], vehicleNumber: string): string {
   const vehicle = findVehicleByNumber(vehicles, vehicleNumber);
@@ -82,10 +100,13 @@ function StoredPhoto({ photoId, alt }: { photoId?: string; alt: string }) {
 }
 
 export function AdminPage({ onLogout }: { onLogout: () => void }) {
-  const [section, setSection] = useState<'route_sheets' | 'officers' | 'vehicles' | 'audit'>('route_sheets');
+  const [section, setSection] = useState<'route_sheets' | 'monthly_route_sheets' | 'officers' | 'vehicles' | 'audit'>('route_sheets');
   const [routeSheets, setRouteSheets] = useState<RouteSheet[]>([]);
+  const [monthlyRouteSheets, setMonthlyRouteSheets] = useState<MonthlyRouteSheet[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [selected, setSelected] = useState<RouteSheet>();
+  const [selectedMonthly, setSelectedMonthly] = useState<MonthlyRouteSheet>();
+  const [printMonthly, setPrintMonthly] = useState<MonthlyRouteSheet>();
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | RouteSheetStatus>('all');
   const [adminError, setAdminError] = useState('');
@@ -97,16 +118,18 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
     setLoading(true);
     setAdminError('');
     try {
-      const [sheets, logs, officerItems, vehicleItems] = await Promise.all([
-        getRouteSheets(), getAuditLogs(), getOfficers(), getVehicles(),
+      const [sheets, monthlySheets, logs, officerItems, vehicleItems] = await Promise.all([
+        getRouteSheets(), getMonthlyRouteSheets(), getAuditLogs(), getOfficers(), getVehicles(),
       ]);
       setRouteSheets(Array.isArray(sheets) ? sheets : []);
+      setMonthlyRouteSheets(Array.isArray(monthlySheets) ? monthlySheets : []);
       setAuditLogs(Array.isArray(logs) ? logs : []);
       setOfficers(Array.isArray(officerItems) ? officerItems : []);
       setVehicles(Array.isArray(vehicleItems) ? vehicleItems : []);
     } catch (caught) {
       console.error('[AdminPage] data load failed', caught);
       setRouteSheets([]);
+      setMonthlyRouteSheets([]);
       setAuditLogs([]);
       setOfficers([]);
       setVehicles([]);
@@ -150,8 +173,11 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
         // Clearing test data must still complete if the audit log is unavailable.
       }
       setRouteSheets([]);
+      setMonthlyRouteSheets([]);
       setAuditLogs([]);
       setSelected(undefined);
+      setSelectedMonthly(undefined);
+      setPrintMonthly(undefined);
       setAdminError('');
       onLogout();
     } catch {
@@ -168,6 +194,44 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
     }
   }
 
+  async function openMonthlyDetails(id: string) {
+    try {
+      const monthlyRouteSheet = await getMonthlyRouteSheetById(id);
+      if (monthlyRouteSheet) setSelectedMonthly(monthlyRouteSheet);
+    } catch (caught) {
+      setAdminError(caught instanceof Error ? caught.message : 'Не вдалося завантажити місячний маршрутний лист.');
+    }
+  }
+
+  async function openMonthlyPrint(id: string) {
+    try {
+      const monthlyRouteSheet = await getMonthlyRouteSheetPrintData(id);
+      if (monthlyRouteSheet) setPrintMonthly(monthlyRouteSheet);
+    } catch (caught) {
+      setAdminError(caught instanceof Error ? caught.message : 'Не вдалося підготувати друковану форму.');
+    }
+  }
+
+  async function closeMonth(id: string) {
+    if (!window.confirm('Закрити місячний маршрутний лист? Нові зміни в цьому місяці для цього авто будуть заборонені.')) return;
+    try {
+      await closeMonthlyRouteSheet(id);
+      await refreshData();
+      setAdminError('');
+    } catch (caught) {
+      setAdminError(caught instanceof Error ? caught.message : 'Не вдалося закрити місячний маршрутний лист.');
+    }
+  }
+
+  async function printMonth(monthlyRouteSheet: MonthlyRouteSheet) {
+    try {
+      await markMonthlyRouteSheetPrinted(monthlyRouteSheet.id);
+      window.setTimeout(() => window.print(), 50);
+    } catch {
+      window.print();
+    }
+  }
+
   function displayVehicle(vehicleNumber: string): string {
     return displayVehicleFromList(vehicles, vehicleNumber);
   }
@@ -177,7 +241,7 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
       <section className="admin-header">
         <div><span className="eyebrow">Модуль адміністрування</span><h1>Адміністративна панель</h1><p>Реєстр маршрутних листів та службових подій</p></div>
         <div className="admin-actions">
-          {(section === 'route_sheets' || section === 'audit') && <button type="button" className="secondary compact" onClick={() => void refreshData()} disabled={loading}>Оновити</button>}
+          {(section === 'route_sheets' || section === 'monthly_route_sheets' || section === 'audit') && <button type="button" className="secondary compact" onClick={() => void refreshData()} disabled={loading}>Оновити</button>}
           {section === 'route_sheets' && <button type="button" className="secondary compact" onClick={() => exportCsv(routeSheets)} disabled={!routeSheets.length}>Експорт CSV</button>}
           {section === 'route_sheets' && <button type="button" className="danger-outline compact" onClick={() => void clearData()}>Очистити локальні тестові дані</button>}
           <button type="button" className="secondary compact" onClick={onLogout}>Вийти</button>
@@ -185,13 +249,14 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
       </section>
 
       <nav className="admin-nav" aria-label="Розділи адміністрування">
-        <button className={section === 'route_sheets' ? 'active' : ''} onClick={() => setSection('route_sheets')}>Маршрутні листи</button>
+        <button className={section === 'route_sheets' ? 'active' : ''} onClick={() => setSection('route_sheets')}>Зміни</button>
+        <button className={section === 'monthly_route_sheets' ? 'active' : ''} onClick={() => setSection('monthly_route_sheets')}>Маршрутні листи авто</button>
         <button className={section === 'officers' ? 'active' : ''} onClick={() => setSection('officers')}>Користувачі</button>
         <button className={section === 'vehicles' ? 'active' : ''} onClick={() => setSection('vehicles')}>Автомобілі</button>
         <button className={section === 'audit' ? 'active' : ''} onClick={() => setSection('audit')}>Журнал дій</button>
       </nav>
 
-      {section === 'route_sheets' && <p className="local-cleanup-note">Очищає лише локальні тестові дані браузера. Записи backend не видаляються.</p>}
+      {(section === 'route_sheets' || section === 'monthly_route_sheets') && <p className="local-cleanup-note">Очищає лише локальні тестові дані браузера. Записи backend не видаляються.</p>}
 
       {adminError && <p className="message error" role="alert">{adminError}</p>}
 
@@ -233,18 +298,58 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
               <thead><tr>
                 <th>Дата</th><th>ПІБ</th><th>Номер жетона</th><th>УПП</th>
                 <th>Екіпаж / підрозділ</th><th>Автомобіль</th><th>Початковий км</th><th>Кінцевий км</th>
-                <th>Пробіг</th><th>Статус</th><th>Ручне внесення</th><th>Потребує перевірки</th>
+                <th>Пробіг</th><th>Заправка</th><th>Літри</th><th>Статус</th><th>Ручне внесення</th><th>Потребує перевірки</th>
                 <th>Час початку</th><th>Час завершення</th><th>Деталі</th>
               </tr></thead>
               <tbody>{filteredRouteSheets.map((item) => (
                 <tr key={item.id}>
                   <td>{formatDate(item.createdAt, true)}</td><td>{item.fullName}</td><td>{item.badgeNumber}</td>
                   <td>{item.department}</td><td>{item.crewNumber || '—'}</td><td>{displayVehicle(item.vehicleNumber)}</td><td>{item.startOdometer}</td>
-                  <td>{item.endOdometer ?? '—'}</td><td>{item.distanceKm ?? '—'}</td>
+                  <td>{item.endOdometer ?? '—'}</td><td>{item.distanceKm ?? '—'}</td><td>{item.refueled ? 'Так' : 'Ні'}</td><td>{item.refueled ? item.fuelLiters ?? '—' : '—'}</td>
                   <td><span className={`status ${item.status}`}>{statusLabels[item.status]}</span></td>
                   <td><span className={`meta-badge ${item.startManualEntry || item.endManualEntry ? 'manual' : ''}`}>{item.startManualEntry || item.endManualEntry ? 'Так' : 'Ні'}</span></td><td>{item.status === 'needs_review' ? 'Так' : 'Ні'}</td>
                   <td>{formatDate(item.startedAt)}</td><td>{formatDate(item.endedAt)}</td>
                   <td><button type="button" className="small-button" onClick={() => void openDetails(item.id)}>Деталі</button></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </section>
+      ))}
+
+      {section === 'monthly_route_sheets' && (loading ? (
+        <section className="empty-state"><h2>Завантажуємо місячні маршрутні листи...</h2></section>
+      ) : !monthlyRouteSheets.length ? (
+        <section className="empty-state"><h2>Місячних маршрутних листів ще немає</h2><p>Перший лист створиться автоматично під час початку зміни на автомобілі.</p></section>
+      ) : (
+        <section className="table-card">
+          <div className="table-scroll">
+            <table>
+              <thead><tr>
+                <th>Автомобіль</th><th>Номерний знак</th><th>УПП</th><th>Місяць</th><th>Рік</th>
+                <th>Статус</th><th>Початковий км</th><th>Кінцевий км</th><th>Загальний пробіг</th>
+                <th>Загальна заправка, л</th><th>Кількість змін</th><th>Дії</th>
+              </tr></thead>
+              <tbody>{monthlyRouteSheets.map((item) => (
+                <tr key={item.id}>
+                  <td>{item.vehicleBrand} {item.vehicleModel}</td>
+                  <td>{item.displayVehicleNumber || item.vehicleNumber}</td>
+                  <td>{item.department}</td>
+                  <td>{monthNames[item.month - 1] ?? item.month}</td>
+                  <td>{item.year}</td>
+                  <td><span className={`status ${item.status}`}>{monthlyStatusLabels[item.status] ?? item.status}</span></td>
+                  <td>{item.openingOdometer ?? '—'}</td>
+                  <td>{item.closingOdometer ?? '—'}</td>
+                  <td>{item.totalDistanceKm}</td>
+                  <td>{item.totalFuelLiters.toLocaleString('uk-UA')}</td>
+                  <td>{item.shiftCount ?? item.shiftEntries?.length ?? 0}</td>
+                  <td>
+                    <div className="button-row compact-row">
+                      <button type="button" className="small-button" onClick={() => void openMonthlyDetails(item.id)}>Переглянути</button>
+                      <button type="button" className="small-button" onClick={() => void openMonthlyPrint(item.id)}>Друк</button>
+                      <button type="button" className="small-button danger-mini" disabled={item.status !== 'open'} onClick={() => void closeMonth(item.id)}>Закрити місяць</button>
+                    </div>
+                  </td>
                 </tr>
               ))}</tbody>
             </table>
@@ -280,6 +385,8 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
               <DetailItem label="Завершення зміни" value={formatDate(selected.endedAt)} /><DetailItem label="Початковий кілометраж" value={`${selected.startOdometer} км`} />
               <DetailItem label="Кінцевий кілометраж" value={selected.endOdometer === undefined ? '—' : `${selected.endOdometer} км`} />
               <DetailItem label="Пробіг" value={selected.distanceKm === undefined ? '—' : `${selected.distanceKm} км`} />
+              <DetailItem label="Заправка" value={selected.refueled ? 'Так' : 'Ні'} />
+              <DetailItem label="Кількість літрів" value={selected.refueled ? `${selected.fuelLiters ?? '—'} л` : '—'} />
               <DetailItem label="Спосіб внесення на початку" value={selected.startManualEntry ? 'Внесено вручну' : '—'} />
               <DetailItem label="Спосіб внесення в кінці" value={selected.endManualEntry === undefined ? '—' : selected.endManualEntry ? 'Внесено вручну' : '—'} />
               <DetailItem label="Статус" value={<span className={`status ${selected.status}`}>{statusLabels[selected.status]}</span>} />
@@ -288,6 +395,97 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
               <figure><figcaption>Фото на початку зміни</figcaption><StoredPhoto photoId={selected.startPhotoId} alt="Одометр на початку зміни" /></figure>
               <figure><figcaption>Фото наприкінці зміни</figcaption><StoredPhoto photoId={selected.endPhotoId} alt="Одометр наприкінці зміни" /></figure>
             </div>
+          </section>
+        </div>
+      )}
+
+      {selectedMonthly && (
+        <div className="modal-backdrop" onMouseDown={() => setSelectedMonthly(undefined)}>
+          <section className="modal detail-modal monthly-detail-modal" role="dialog" aria-modal="true" aria-label="Деталі місячного маршрутного листа" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="section-heading"><div><span className="eyebrow">Маршрутний лист авто</span><h2>Деталі місячного листа</h2></div><button type="button" className="text-button" onClick={() => setSelectedMonthly(undefined)}>Закрити</button></div>
+            <dl className="detail-grid">
+              <DetailItem label="Автомобіль" value={`${selectedMonthly.vehicleBrand} ${selectedMonthly.vehicleModel}`} />
+              <DetailItem label="Номерний знак" value={selectedMonthly.displayVehicleNumber || selectedMonthly.vehicleNumber} />
+              <DetailItem label="УПП" value={selectedMonthly.department} />
+              <DetailItem label="Місяць/рік" value={`${monthNames[selectedMonthly.month - 1] ?? selectedMonthly.month} ${selectedMonthly.year}`} />
+              <DetailItem label="Початковий кілометраж" value={selectedMonthly.openingOdometer === null || selectedMonthly.openingOdometer === undefined ? '—' : `${selectedMonthly.openingOdometer} км`} />
+              <DetailItem label="Кінцевий кілометраж" value={selectedMonthly.closingOdometer === null || selectedMonthly.closingOdometer === undefined ? '—' : `${selectedMonthly.closingOdometer} км`} />
+              <DetailItem label="Сумарний пробіг" value={`${selectedMonthly.totalDistanceKm} км`} />
+              <DetailItem label="Сумарна заправка" value={`${selectedMonthly.totalFuelLiters.toLocaleString('uk-UA')} л`} />
+              <DetailItem label="Статус" value={<span className={`status ${selectedMonthly.status}`}>{monthlyStatusLabels[selectedMonthly.status] ?? selectedMonthly.status}</span>} />
+            </dl>
+            <div className="table-scroll nested-table">
+              <table>
+                <thead><tr>
+                  <th>Дата</th><th>Час початку</th><th>Час завершення</th><th>ПІБ патрульного</th><th>Жетон</th>
+                  <th>Екіпаж / підрозділ</th><th>Початковий км</th><th>Кінцевий км</th><th>Пробіг</th>
+                  <th>Заправка</th><th>Літри</th><th>Фото початку</th><th>Фото завершення</th><th>Статус</th>
+                </tr></thead>
+                <tbody>{(selectedMonthly.shiftEntries ?? []).map((entry) => (
+                  <tr key={entry.id}>
+                    <td>{formatDate(entry.startedAt, true)}</td><td>{formatDate(entry.startedAt)}</td><td>{formatDate(entry.endedAt)}</td>
+                    <td>{entry.fullName}</td><td>{entry.badgeNumber}</td><td>{entry.crewNumber || '—'}</td>
+                    <td>{entry.startOdometer}</td><td>{entry.endOdometer ?? '—'}</td><td>{entry.distanceKm ?? '—'}</td>
+                    <td>{entry.refueled ? 'Так' : 'Ні'}</td><td>{entry.refueled ? entry.fuelLiters ?? '—' : '—'}</td>
+                    <td><div className="table-photo"><StoredPhoto photoId={entry.startPhotoId} alt="Фото початку зміни" /></div></td>
+                    <td><div className="table-photo"><StoredPhoto photoId={entry.endPhotoId} alt="Фото завершення зміни" /></div></td>
+                    <td><span className={`status ${entry.status}`}>{statusLabels[entry.status]}</span></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {printMonthly && (
+        <div className="modal-backdrop print-modal-backdrop" onMouseDown={() => setPrintMonthly(undefined)}>
+          <section className="modal print-modal" role="dialog" aria-modal="true" aria-label="Друк місячного маршрутного листа" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="section-heading no-print"><div><span className="eyebrow">Друк</span><h2>Місячний маршрутний лист</h2></div><button type="button" className="text-button" onClick={() => setPrintMonthly(undefined)}>Закрити</button></div>
+            <div className="button-row no-print">
+              <button type="button" onClick={() => void printMonth(printMonthly)}>Друкувати</button>
+            </div>
+            <article className="print-page">
+              <header className="print-header">
+                <h1>ЕЛЕКТРОННИЙ МАРШРУТНИЙ ЛИСТ</h1>
+                <p>службового автомобіля</p>
+              </header>
+              <section className="print-summary-grid">
+                <div><strong>Марка</strong><span>{printMonthly.vehicleBrand}</span></div>
+                <div><strong>Модель</strong><span>{printMonthly.vehicleModel}</span></div>
+                <div><strong>Номерний знак</strong><span>{printMonthly.displayVehicleNumber || printMonthly.vehicleNumber}</span></div>
+                <div><strong>УПП</strong><span>{printMonthly.department}</span></div>
+                <div><strong>Місяць</strong><span>{monthNames[printMonthly.month - 1] ?? printMonthly.month}</span></div>
+                <div><strong>Рік</strong><span>{printMonthly.year}</span></div>
+              </section>
+              <table className="print-table">
+                <thead><tr>
+                  <th>№</th><th>Дата</th><th>Патрульний</th><th>Жетон</th><th>Початок зміни</th><th>Завершення зміни</th>
+                  <th>Початковий км</th><th>Кінцевий км</th><th>Пробіг</th><th>Заправка, л</th><th>Примітка</th>
+                </tr></thead>
+                <tbody>{(printMonthly.shiftEntries ?? []).map((entry, index) => (
+                  <tr key={entry.id}>
+                    <td>{index + 1}</td><td>{formatDate(entry.startedAt, true)}</td><td>{entry.fullName}</td><td>{entry.badgeNumber}</td>
+                    <td>{formatDate(entry.startedAt)}</td><td>{formatDate(entry.endedAt)}</td><td>{entry.startOdometer}</td>
+                    <td>{entry.endOdometer ?? '—'}</td><td>{entry.distanceKm ?? '—'}</td><td>{entry.refueled ? entry.fuelLiters ?? '—' : '—'}</td>
+                    <td>{entry.status === 'needs_review' ? 'Потребує перевірки' : ''}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+              <section className="print-totals">
+                <p>Початковий кілометраж за місяць: <strong>{printMonthly.openingOdometer ?? '—'}</strong></p>
+                <p>Кінцевий кілометраж за місяць: <strong>{printMonthly.closingOdometer ?? '—'}</strong></p>
+                <p>Загальний пробіг: <strong>{printMonthly.totalDistanceKm} км</strong></p>
+                <p>Загальна кількість літрів заправки: <strong>{printMonthly.totalFuelLiters.toLocaleString('uk-UA')} л</strong></p>
+                <p>Кількість змін: <strong>{printMonthly.shiftEntries?.length ?? printMonthly.shiftCount ?? 0}</strong></p>
+              </section>
+              <section className="signature-block">
+                <p>Кінцевий кілометраж звірено: ______________________</p>
+                <p>Адміністратор: ______________________</p>
+                <p>Підпис: ______________________</p>
+                <p>Дата: ____ / ____ / ______</p>
+              </section>
+            </article>
           </section>
         </div>
       )}

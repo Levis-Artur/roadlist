@@ -28,35 +28,76 @@ model Vehicle {
   isActive           Boolean  @default(true)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+  monthlyRouteSheets VehicleMonthlyRouteSheet[]
 
   @@index([department, isActive])
 }
 
+model VehicleMonthlyRouteSheet {
+  id                   String       @id @default(uuid())
+  vehicleId            String
+  vehicleNumber        String
+  displayVehicleNumber String?
+  vehicleBrand         String
+  vehicleModel         String
+  department           String
+  year                 Int
+  month                Int
+  status               String       @default("open")
+  openingOdometer      Int?
+  closingOdometer      Int?
+  totalDistanceKm      Int          @default(0)
+  totalFuelLiters      Float        @default(0)
+  printedAt            DateTime?
+  closedAt             DateTime?
+  archivedAt           DateTime?
+  adminCheckedBy       String?
+  adminComment         String?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  vehicle              Vehicle      @relation(fields: [vehicleId], references: [id])
+  shiftEntries         RouteSheet[]
+
+  @@unique([vehicleId, year, month])
+  @@index([vehicleNumber, year, month])
+  @@index([status])
+}
+
 model RouteSheet {
-  id               String          @id @default(uuid())
-  badgeNumber      String
-  fullName         String
-  department       String
-  crewNumber       String?
-  vehicleNumber    String
-  startOdometer    Int
-  endOdometer      Int?
-  distanceKm       Int?
-  startPhotoId     String?
-  endPhotoId       String?
-  startOcrValue    Int?
-  endOcrValue      Int?
-  startManualEntry Boolean
-  endManualEntry   Boolean?
-  status           String
-  startedAt        DateTime
-  endedAt          DateTime?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-  photos           OdometerPhoto[]
+  id                   String                    @id @default(uuid())
+  monthlyRouteSheetId  String?
+  monthlyRouteSheet    VehicleMonthlyRouteSheet? @relation(fields: [monthlyRouteSheetId], references: [id])
+  badgeNumber          String
+  fullName             String
+  department           String
+  crewNumber           String?
+  vehicleId            String?
+  vehicleNumber        String
+  displayVehicleNumber String?
+  vehicleBrand         String?
+  vehicleModel         String?
+  startOdometer        Int
+  endOdometer          Int?
+  distanceKm           Int?
+  startPhotoId         String?
+  endPhotoId           String?
+  startOcrValue        Int?
+  endOcrValue          Int?
+  startManualEntry     Boolean
+  endManualEntry       Boolean?
+  refueled             Boolean                   @default(false)
+  fuelLiters           Float?
+  status               String
+  startedAt            DateTime
+  endedAt              DateTime?
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  photos               OdometerPhoto[]
 
   @@index([badgeNumber, status])
   @@index([crewNumber, vehicleNumber, status])
+  @@index([vehicleNumber, status])
+  @@index([monthlyRouteSheetId])
   @@index([createdAt])
 }
 

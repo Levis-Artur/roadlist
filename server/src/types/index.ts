@@ -24,6 +24,8 @@ export interface FinishShiftInput {
   endOcrValue?: number;
   endManualEntry: boolean;
   endPhotoId?: string;
+  refueled?: boolean;
+  fuelLiters?: number | null;
 }
 
 export interface RouteSheetFilters {

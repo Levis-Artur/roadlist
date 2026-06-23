@@ -6,6 +6,7 @@ import { ApiError, apiGet, apiPost, isApiUnavailableError } from './apiClient';
 import { addAuditLog } from './auditService';
 import { getOfficerToken } from './officerService';
 import { extractEntity, extractList } from '../utils/apiResponse';
+import { generateId } from '../utils/generateId';
 
 interface RouteSheetResponse {
   success: boolean;
@@ -28,6 +29,8 @@ function normalizeRouteSheet(routeSheet: RouteSheet): RouteSheet {
     startOcrValue: routeSheet.startOcrValue ?? undefined,
     endOcrValue: routeSheet.endOcrValue ?? undefined,
     endManualEntry: routeSheet.endManualEntry ?? undefined,
+    refueled: routeSheet.refueled ?? false,
+    fuelLiters: routeSheet.fuelLiters ?? undefined,
     endedAt: routeSheet.endedAt ?? undefined,
   };
 }
@@ -59,6 +62,12 @@ async function startShiftLocally(input: StartShiftInput): Promise<RouteSheet> {
     await localAudit('Спроба почати другу активну зміну', duplicate);
     throw new Error('У цього патрульного вже є активна зміна. Спочатку завершіть поточну зміну.');
   }
+  const busyVehicleShift = localRouteSheets({ status: 'active' })
+    .find((item) => normalizeVehicleNumber(item.vehicleNumber) === normalizeVehicleNumber(input.vehicleNumber));
+  if (busyVehicleShift) {
+    await localAudit('Перевірка зайнятості авто: старт заблоковано', busyVehicleShift);
+    throw new Error('Цей автомобіль вже використовується в активній зміні. Почати нову зміну неможливо до завершення попередньої.');
+  }
   if (!input.vehicleNumber.trim()) throw new Error('Вкажіть номер автомобіля.');
   if (!input.startPhotoId) throw new Error('Додайте фото одометра.');
   if (!Number.isFinite(input.startOdometer) || input.startOdometer < 0 || !Number.isInteger(input.startOdometer)) {
@@ -66,7 +75,7 @@ async function startShiftLocally(input: StartShiftInput): Promise<RouteSheet> {
   }
   const now = new Date().toISOString();
   const routeSheet: RouteSheet = {
-    id: crypto.randomUUID(),
+    id: generateId('route-sheet'),
     ...input.officer,
     crewNumber: input.crewNumber?.trim().toLocaleUpperCase('uk-UA') || null,
     vehicleNumber: normalizeVehicleNumber(input.vehicleNumber),
@@ -96,6 +105,12 @@ async function finishShiftLocally(input: FinishShiftInput): Promise<RouteSheet> 
   if (!Number.isFinite(input.endOdometer) || input.endOdometer < 0 || !Number.isInteger(input.endOdometer)) {
     throw new Error('Кілометраж має бути невід’ємним числом.');
   }
+  if (input.refueled && (input.fuelLiters === null || input.fuelLiters === undefined)) {
+    throw new Error('Вкажіть кількість літрів заправки.');
+  }
+  if (input.refueled && (!Number.isFinite(Number(input.fuelLiters)) || Number(input.fuelLiters) <= 0)) {
+    throw new Error('Кількість літрів має бути числом більше 0.');
+  }
   if (input.endOdometer < active.startOdometer) throw new Error('Кінцевий кілометраж не може бути меншим за початковий.');
   const distanceKm = input.endOdometer - active.startOdometer;
   const routeSheet: RouteSheet = {
@@ -104,6 +119,8 @@ async function finishShiftLocally(input: FinishShiftInput): Promise<RouteSheet> 
     endManualEntry: true,
     endPhotoId: input.endPhotoId,
     distanceKm,
+    refueled: Boolean(input.refueled),
+    fuelLiters: input.refueled ? input.fuelLiters ?? null : null,
     status: distanceKm > 400 ? 'needs_review' : 'completed',
     endedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -191,6 +208,8 @@ export async function finishShift(input: FinishShiftInput): Promise<RouteSheet> 
       endOdometer: input.endOdometer,
       endPhotoId: input.endPhotoId,
       endManualEntry: true,
+      refueled: Boolean(input.refueled),
+      fuelLiters: input.refueled ? input.fuelLiters : null,
     });
     const routeSheet = extractEntity<RouteSheet>(response, 'routeSheet');
     if (!routeSheet) throw new Error('Не вдалося зберегти маршрутний лист. Некоректна відповідь сервера.');

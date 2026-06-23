@@ -3,6 +3,8 @@ import { normalizeVehicleNumber } from '../utils/vehicleNumber';
 import { apiDelete, apiGet, apiPatch, apiPost, isApiUnavailableError } from './apiClient';
 import { addAuditLog } from './auditService';
 import { extractEntity, extractList } from '../utils/apiResponse';
+import { generateId } from '../utils/generateId';
+import { routeSheetStorage } from '../storage/routeSheetStorage';
 
 const VEHICLE_STORAGE_KEY = 'patrol-vehicle-directory';
 interface VehiclesResponse { success: boolean; vehicles: Vehicle[] }
@@ -39,13 +41,36 @@ function filteredLocalVehicles(filters: VehicleFilters) {
     && (filters.isActive === undefined || vehicle.isActive === filters.isActive));
 }
 
+function withLocalAvailability(vehicles: Vehicle[]): Vehicle[] {
+  const activeRouteSheets = routeSheetStorage.getAll().filter((item) => item.status === 'active');
+  return vehicles.map((vehicle) => {
+    const activeShift = activeRouteSheets.find((item) => item.vehicleNumber === vehicle.plateNumber);
+    return {
+      ...vehicle,
+      availability: activeShift
+        ? {
+            status: 'busy',
+            activeShiftId: activeShift.id,
+            occupiedBy: activeShift.fullName,
+            startedAt: activeShift.startedAt,
+          }
+        : {
+            status: 'available',
+            activeShiftId: null,
+            occupiedBy: null,
+            startedAt: null,
+          },
+    };
+  });
+}
+
 export async function getVehicles(filters: VehicleFilters = {}): Promise<Vehicle[]> {
   try { return extractList<Vehicle>(await apiGet<unknown>(`/api/vehicles${queryString(filters)}`), 'vehicles'); }
   catch (error) { if (!isApiUnavailableError(error)) throw error; return filteredLocalVehicles(filters); }
 }
 export async function getAvailableVehicles(): Promise<Vehicle[]> {
   try { return extractList<Vehicle>(await apiGet<unknown>('/api/vehicles/available'), 'vehicles'); }
-  catch (error) { if (!isApiUnavailableError(error)) throw error; return filteredLocalVehicles({ isActive: true }); }
+  catch (error) { if (!isApiUnavailableError(error)) throw error; return withLocalAvailability(filteredLocalVehicles({ isActive: true })); }
 }
 export async function createVehicle(input: CreateVehicleInput): Promise<Vehicle> {
   try {
@@ -59,7 +84,7 @@ export async function createVehicle(input: CreateVehicleInput): Promise<Vehicle>
     const plateNumber = normalizeVehicleNumber(input.displayPlateNumber);
     if (vehicles.some((item) => item.plateNumber === plateNumber)) throw new Error('Автомобіль з таким номерним знаком вже існує');
     const now = new Date().toISOString();
-    const vehicle: Vehicle = { ...input, plateNumber, id: crypto.randomUUID(), createdAt: now, updatedAt: now };
+    const vehicle: Vehicle = { ...input, plateNumber, id: generateId('vehicle'), createdAt: now, updatedAt: now };
     saveLocalVehicles([...vehicles, vehicle]);
     await addAuditLog({ action: 'Створено автомобіль', entityType: 'vehicle', entityId: vehicle.id, details: `${vehicle.plateNumber}; ${vehicle.brand} ${vehicle.model}` }).catch(() => undefined);
     return vehicle;

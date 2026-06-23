@@ -6,6 +6,7 @@ import { officerRouter } from './routes/officer.routes.js';
 import { photoRouter } from './routes/photo.routes.js';
 import { routeSheetRouter } from './routes/routeSheet.routes.js';
 import { vehicleRouter } from './routes/vehicle.routes.js';
+import { monthlyRouteSheetRouter } from './routes/monthlyRouteSheet.routes.js';
 import { AppError, errorHandler } from './middleware/errorHandler.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { env } from './config/env.js';
@@ -24,6 +25,7 @@ app.use('/api/photos', photoRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/audit-logs', auditRouter);
 app.use('/api/vehicles', vehicleRouter);
+app.use('/api/monthly-route-sheets', monthlyRouteSheetRouter);
 
 app.use((_request, _response, next) => next(new AppError('Маршрут API не знайдено.', 404)));
 app.use(errorHandler);

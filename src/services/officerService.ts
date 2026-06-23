@@ -4,6 +4,7 @@ import { ApiError, apiDelete, apiGet, apiPatch, apiPost, isApiUnavailableError }
 import { addAuditLog } from './auditService';
 import { BADGE_NUMBER_ERROR, isValidBadgeNumber } from '../utils/badgeNumber';
 import { extractEntity, extractList } from '../utils/apiResponse';
+import { generateId } from '../utils/generateId';
 
 interface VerifyOfficerResponse {
   success: boolean;
@@ -112,7 +113,7 @@ export async function createOfficer(input: CreateOfficerInput): Promise<Officer>
     if (officers.some((item) => item.badgeNumber === input.badgeNumber.trim())) throw new Error('Патрульний з таким номером жетона вже існує');
     const now = new Date().toISOString();
     const { pin, ...safeInput } = input;
-    const officer: Officer = { ...safeInput, hasPin: true, badgeNumber: input.badgeNumber.trim(), fullName: input.fullName.trim(), department: input.department.trim(), id: crypto.randomUUID(), createdAt: now, updatedAt: now };
+    const officer: Officer = { ...safeInput, hasPin: true, badgeNumber: input.badgeNumber.trim(), fullName: input.fullName.trim(), department: input.department.trim(), id: generateId('officer'), createdAt: now, updatedAt: now };
     saveLocalOfficers([...officers, officer]);
     const hashes = await pinHashesWithDefaults(); hashes[officer.badgeNumber] = await hashPin(pin); localStorage.setItem(OFFICER_PIN_STORAGE_KEY, JSON.stringify(hashes));
     await addAuditLog({ action: 'Створено патрульного', entityType: 'officer', entityId: officer.id, badgeNumber: officer.badgeNumber, details: `${officer.fullName}; ${officer.department}` }).catch(() => undefined);

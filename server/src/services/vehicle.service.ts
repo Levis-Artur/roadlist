@@ -18,10 +18,34 @@ function uniqueVehicleError(error: unknown): never {
 }
 
 export async function listAvailableVehicles() {
-  return prisma.vehicle.findMany({
+  const vehicles = await prisma.vehicle.findMany({
     where: { isActive: true },
     orderBy: [{ brand: 'asc' }, { model: 'asc' }],
     select: { id: true, plateNumber: true, displayPlateNumber: true, brand: true, model: true, department: true, isActive: true, createdAt: true, updatedAt: true },
+  });
+  const activeShifts = await prisma.routeSheet.findMany({
+    where: { status: 'active', vehicleNumber: { in: vehicles.map((vehicle) => vehicle.plateNumber) } },
+    select: { id: true, vehicleNumber: true, fullName: true, startedAt: true },
+  });
+  const activeByVehicle = new Map(activeShifts.map((shift) => [shift.vehicleNumber, shift]));
+  return vehicles.map((vehicle) => {
+    const activeShift = activeByVehicle.get(vehicle.plateNumber);
+    return {
+      ...vehicle,
+      availability: activeShift
+        ? {
+            status: 'busy',
+            activeShiftId: activeShift.id,
+            occupiedBy: activeShift.fullName,
+            startedAt: activeShift.startedAt,
+          }
+        : {
+            status: 'available',
+            activeShiftId: null,
+            occupiedBy: null,
+            startedAt: null,
+          },
+    };
   });
 }
 

@@ -1,6 +1,7 @@
 import type { AddAuditLogInput, AuditLog } from '../types';
 import { apiGet, apiPost, isApiUnavailableError } from './apiClient';
 import { extractList } from '../utils/apiResponse';
+import { generateId } from '../utils/generateId';
 
 const AUDIT_STORAGE_KEY = 'patrol-route-sheet-audit-logs';
 
@@ -25,7 +26,7 @@ export async function addAuditLog(input: AddAuditLogInput): Promise<void> {
     await apiPost('/api/audit-logs', input);
   } catch (error) {
     if (!isApiUnavailableError(error)) throw error;
-    const log: AuditLog = { id: crypto.randomUUID(), ...input, createdAt: new Date().toISOString() };
+    const log: AuditLog = { id: generateId('audit'), ...input, createdAt: new Date().toISOString() };
     localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify([log, ...localAuditLogs()].slice(0, 1000)));
   }
 }

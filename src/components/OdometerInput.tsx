@@ -6,9 +6,10 @@ interface Props {
   onSubmit: (result: OdometerResult) => Promise<string | undefined>;
   submitLabel: string;
   type: 'start' | 'end';
+  children?: React.ReactNode;
 }
 
-export function OdometerInput({ onSubmit, submitLabel, type }: Props) {
+export function OdometerInput({ onSubmit, submitLabel, type, children }: Props) {
   const [photo, setPhoto] = useState<string>();
   const [photoId, setPhotoId] = useState<string>();
   const [manualValue, setManualValue] = useState('');
@@ -28,7 +29,8 @@ export function OdometerInput({ onSubmit, submitLabel, type }: Props) {
       setPhoto(preview);
       setPhotoId(savedPhotoId);
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Не вдалося завантажити фото.');
+      console.error('[OdometerInput] photo upload failed', error);
+      setError('Не вдалося зберегти фото одометра. Спробуйте ще раз.');
     } finally {
       setPhotoStage('idle');
     }
@@ -98,6 +100,7 @@ export function OdometerInput({ onSubmit, submitLabel, type }: Props) {
             placeholder="Наприклад, 198250"
           />
         </label>
+        {children}
         <button type="submit" disabled={submitting}>{submitting ? (type === 'start' ? 'Зберігаємо початок зміни...' : 'Завершуємо зміну...') : submitLabel}</button>
       </form>
 
