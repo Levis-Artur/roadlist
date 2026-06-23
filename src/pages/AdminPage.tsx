@@ -12,6 +12,7 @@ import {
   getMonthlyRouteSheetPrintData,
   getMonthlyRouteSheets,
   markMonthlyRouteSheetPrinted,
+  reopenMonthlyRouteSheet,
 } from '../services/monthlyRouteSheetService';
 import type { AuditLog, MonthlyRouteSheet, Officer, RouteSheet, RouteSheetStatus, Vehicle } from '../types';
 import { findVehicleByNumber, formatVehicleLabel } from '../utils/vehicleDisplay';
@@ -24,9 +25,9 @@ const statusLabels: Record<RouteSheetStatus, string> = {
 };
 
 const monthlyStatusLabels: Record<string, string> = {
-  open: 'Відкритий',
+  open: 'В роботі',
   closed: 'Закритий',
-  archived: 'Архівний',
+  archived: 'В архіві',
 };
 
 const monthNames = [
@@ -280,13 +281,30 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
   }
 
   async function closeMonth(id: string) {
-    if (!window.confirm('Закрити місячний маршрутний лист? Нові зміни в цьому місяці для цього авто будуть заборонені.')) return;
+    if (!window.confirm('Ви дійсно хочете закрити місячний маршрутний лист?\nПісля закриття нові зміни за цей місяць для цього автомобіля буде заборонено.')) return;
     try {
-      await closeMonthlyRouteSheet(id);
+      const updated = await closeMonthlyRouteSheet(id);
+      setMonthlyRouteSheets((items) => items.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
+      setSelectedMonthly((item) => (item?.id === updated.id ? { ...item, ...updated } : item));
+      setPrintMonthly((item) => (item?.id === updated.id ? { ...item, ...updated } : item));
       await refreshData();
       setAdminError('');
     } catch (caught) {
       setAdminError(caught instanceof Error ? caught.message : 'Не вдалося закрити місячний маршрутний лист.');
+    }
+  }
+
+  async function reopenMonth(id: string) {
+    if (!window.confirm('Повернути місячний маршрутний лист у роботу?')) return;
+    try {
+      const updated = await reopenMonthlyRouteSheet(id);
+      setMonthlyRouteSheets((items) => items.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
+      setSelectedMonthly((item) => (item?.id === updated.id ? { ...item, ...updated } : item));
+      setPrintMonthly((item) => (item?.id === updated.id ? { ...item, ...updated } : item));
+      await refreshData();
+      setAdminError('');
+    } catch (caught) {
+      setAdminError(caught instanceof Error ? caught.message : 'Не вдалося повернути місячний маршрутний лист у роботу.');
     }
   }
 
@@ -415,7 +433,11 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
                     <div className="button-row compact-row">
                       <button type="button" className="small-button" onClick={() => void openMonthlyDetails(item.id)}>Переглянути</button>
                       <button type="button" className="small-button" onClick={() => void openMonthlyPrint(item.id)}>Друк</button>
-                      <button type="button" className="small-button danger-mini" disabled={item.status !== 'open'} onClick={() => void closeMonth(item.id)}>Закрити місяць</button>
+                      {item.status === 'closed' ? (
+                        <button type="button" className="small-button" onClick={() => void reopenMonth(item.id)}>Повернути в роботу</button>
+                      ) : (
+                        <button type="button" className="small-button danger-mini" disabled={item.status !== 'open'} onClick={() => void closeMonth(item.id)}>Закрити місяць</button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -537,6 +559,14 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
               <DetailItem label="Сумарна заправка" value={`${selectedMonthly.totalFuelLiters.toLocaleString('uk-UA')} л`} />
               <DetailItem label="Статус" value={<span className={`status ${selectedMonthly.status}`}>{monthlyStatusLabels[selectedMonthly.status] ?? selectedMonthly.status}</span>} />
             </dl>
+            <div className="button-row compact-row">
+              <button type="button" className="small-button" onClick={() => void openMonthlyPrint(selectedMonthly.id)}>Друк</button>
+              {selectedMonthly.status === 'closed' ? (
+                <button type="button" className="small-button" onClick={() => void reopenMonth(selectedMonthly.id)}>Повернути в роботу</button>
+              ) : (
+                <button type="button" className="small-button danger-mini" disabled={selectedMonthly.status !== 'open'} onClick={() => void closeMonth(selectedMonthly.id)}>Закрити місяць</button>
+              )}
+            </div>
             <div className="table-scroll nested-table">
               <table>
                 <thead><tr>

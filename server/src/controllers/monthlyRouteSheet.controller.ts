@@ -5,6 +5,7 @@ import {
   getMonthlyRouteSheetPrintData,
   listMonthlyRouteSheets,
   markMonthlyRouteSheetPrinted,
+  reopenMonthlyRouteSheet,
 } from '../services/monthlyRouteSheet.service.js';
 import type { MonthlyRouteSheetFilters } from '../services/monthlyRouteSheet.service.js';
 
@@ -31,6 +32,10 @@ export async function closeMonthlyRouteSheetController(request: Request, respons
 
 export async function markMonthlyRouteSheetPrintedController(request: Request, response: Response, next: NextFunction) {
   try { response.json({ success: true, monthlyRouteSheet: await markMonthlyRouteSheetPrinted(request.params.id, metadata(request)) }); } catch (error) { next(error); }
+}
+
+export async function reopenMonthlyRouteSheetController(request: Request, response: Response, next: NextFunction) {
+  try { response.json({ success: true, monthlyRouteSheet: await reopenMonthlyRouteSheet(request.params.id, metadata(request)) }); } catch (error) { next(error); }
 }
 
 export async function getMonthlyRouteSheetPrintDataController(request: Request, response: Response, next: NextFunction) {

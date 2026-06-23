@@ -69,6 +69,23 @@ export async function closeMonthlyRouteSheet(id: string, metadata: RequestMetada
   return closed;
 }
 
+export async function reopenMonthlyRouteSheet(id: string, metadata: RequestMetadata = {}) {
+  const item = await prisma.vehicleMonthlyRouteSheet.findUnique({ where: { id } });
+  if (!item) throw new AppError('Місячний маршрутний лист не знайдено.', 404);
+  const reopened = await prisma.vehicleMonthlyRouteSheet.update({
+    where: { id },
+    data: { status: 'open', closedAt: null, adminCheckedBy: null },
+  });
+  await createAuditLog({
+    action: 'Місячний маршрутний лист повернено в роботу',
+    entityType: 'monthly_route_sheet',
+    entityId: id,
+    details: `${reopened.vehicleBrand} ${reopened.vehicleModel}; ${reopened.displayVehicleNumber ?? reopened.vehicleNumber}; ${reopened.month}.${reopened.year}`,
+    ...metadata,
+  });
+  return reopened;
+}
+
 export async function markMonthlyRouteSheetPrinted(id: string, metadata: RequestMetadata = {}) {
   const item = await prisma.vehicleMonthlyRouteSheet.findUnique({ where: { id } });
   if (!item) throw new AppError('Місячний маршрутний лист не знайдено.', 404);

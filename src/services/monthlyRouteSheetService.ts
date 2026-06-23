@@ -103,6 +103,15 @@ export async function closeMonthlyRouteSheet(id: string): Promise<MonthlyRouteSh
   return monthlyRouteSheet;
 }
 
+export async function reopenMonthlyRouteSheet(id: string): Promise<MonthlyRouteSheet> {
+  const monthlyRouteSheet = extractEntity<MonthlyRouteSheet>(
+    await apiPost<MonthlyRouteSheetResponse>(`/api/monthly-route-sheets/${encodeURIComponent(id)}/reopen`),
+    'monthlyRouteSheet',
+  );
+  if (!monthlyRouteSheet) throw new Error('Не вдалося повернути місячний маршрутний лист у роботу.');
+  return monthlyRouteSheet;
+}
+
 export async function markMonthlyRouteSheetPrinted(id: string): Promise<MonthlyRouteSheet> {
   const monthlyRouteSheet = extractEntity<MonthlyRouteSheet>(
     await apiPost<MonthlyRouteSheetResponse>(`/api/monthly-route-sheets/${encodeURIComponent(id)}/mark-printed`),
