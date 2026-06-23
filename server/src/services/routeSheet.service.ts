@@ -320,3 +320,23 @@ export async function markRouteSheetNeedsReview(id: string, comment?: unknown, m
   });
   return updated;
 }
+
+export async function updateRouteSheetAdminComment(id: string, comment?: unknown, metadata: RequestMetadata = {}) {
+  const routeSheet = await prisma.routeSheet.findUnique({ where: { id } });
+  if (!routeSheet) throw new AppError('Маршрутний лист не знайдено.', 404);
+  const updated = await prisma.routeSheet.update({
+    where: { id },
+    data: {
+      adminReviewComment: typeof comment === 'string' && comment.trim() ? comment.trim() : null,
+    },
+  });
+  await createAuditLog({
+    action: 'Коментар адміністратора до маршрутного запису збережено',
+    entityType: 'route_sheet',
+    entityId: updated.id,
+    badgeNumber: updated.badgeNumber,
+    details: updated.adminReviewComment ?? undefined,
+    ...metadata,
+  });
+  return updated;
+}

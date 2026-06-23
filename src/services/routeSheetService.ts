@@ -2,7 +2,7 @@ import { routeSheetStorage } from '../storage/routeSheetStorage';
 import type { FinishShiftInput, RouteSheet, RouteSheetFilters, StartShiftInput } from '../types';
 import { normalizeVehicleNumber } from '../utils/vehicleNumber';
 import { BADGE_NUMBER_ERROR, isValidBadgeNumber } from '../utils/badgeNumber';
-import { ApiError, apiGet, apiPost, isApiUnavailableError } from './apiClient';
+import { ApiError, apiGet, apiPatch, apiPost, isApiUnavailableError } from './apiClient';
 import { addAuditLog } from './auditService';
 import { getOfficerToken } from './officerService';
 import { extractEntity, extractList } from '../utils/apiResponse';
@@ -227,7 +227,7 @@ export async function finishShift(input: FinishShiftInput): Promise<RouteSheet> 
 export async function verifyRouteSheet(id: string, comment?: string): Promise<RouteSheet> {
   try {
     const routeSheet = extractEntity<RouteSheet>(
-      await apiPost<unknown>(`/api/route-sheets/${encodeURIComponent(id)}/verify`, { comment }),
+      await apiPost<unknown>(`/api/route-sheets/${encodeURIComponent(id)}/verify`, { comment: comment?.trim() || null }),
       'routeSheet',
     );
     if (!routeSheet) throw new Error('Не вдалося позначити запис як перевірений.');
@@ -272,6 +272,29 @@ export async function markRouteSheetNeedsReview(id: string, comment?: string): P
     };
     routeSheetStorage.update(updated);
     await localAudit('Маршрутний запис повернено на перевірку', updated, updated.adminReviewComment ?? undefined);
+    return updated;
+  }
+}
+
+export async function updateRouteSheetAdminComment(id: string, comment?: string | null): Promise<RouteSheet> {
+  try {
+    const routeSheet = extractEntity<RouteSheet>(
+      await apiPatch<unknown>(`/api/route-sheets/${encodeURIComponent(id)}/admin-comment`, { comment: comment?.trim() || null }),
+      'routeSheet',
+    );
+    if (!routeSheet) throw new Error('Не вдалося зберегти коментар адміністратора.');
+    return normalizeRouteSheet(routeSheet);
+  } catch (error) {
+    if (!isApiUnavailableError(error)) throw error;
+    const routeSheet = routeSheetStorage.getAll().find((item) => item.id === id);
+    if (!routeSheet) throw new Error('Маршрутний лист не знайдено.');
+    const updated: RouteSheet = {
+      ...routeSheet,
+      adminReviewComment: comment?.trim() || null,
+      updatedAt: new Date().toISOString(),
+    };
+    routeSheetStorage.update(updated);
+    await localAudit('Коментар адміністратора до маршрутного запису збережено', updated, updated.adminReviewComment ?? undefined);
     return updated;
   }
 }

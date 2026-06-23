@@ -3,7 +3,7 @@ import { OfficerDirectory } from '../components/OfficerDirectory';
 import { VehicleDirectory } from '../components/VehicleDirectory';
 import { addAuditLog, clearAuditLogs, getAuditLogs } from '../services/auditService';
 import { clearOdometerPhotos, getOdometerPhoto } from '../services/photoService';
-import { clearRouteSheets, getRouteSheetById, getRouteSheets, markRouteSheetNeedsReview, verifyRouteSheet } from '../services/routeSheetService';
+import { clearRouteSheets, getRouteSheetById, getRouteSheets, markRouteSheetNeedsReview, updateRouteSheetAdminComment, verifyRouteSheet } from '../services/routeSheetService';
 import { getOfficers } from '../services/officerService';
 import { getVehicles } from '../services/vehicleService';
 import {
@@ -112,9 +112,11 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
   const [selected, setSelected] = useState<RouteSheet>();
   const [selectedMonthly, setSelectedMonthly] = useState<MonthlyRouteSheet>();
   const [printMonthly, setPrintMonthly] = useState<MonthlyRouteSheet>();
-  const [reviewAction, setReviewAction] = useState<'verify' | 'needs_review' | null>(null);
+  const [reviewAction, setReviewAction] = useState<'verify' | 'comment' | 'needs_review' | null>(null);
   const [reviewComment, setReviewComment] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewSuccess, setReviewSuccess] = useState('');
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | RouteSheetStatus>('all');
   const [adminError, setAdminError] = useState('');
@@ -211,10 +213,18 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
       : monthly);
   }
 
-  function openReviewAction(action: 'verify' | 'needs_review') {
+  function resetReviewForm() {
+    setReviewAction(null);
+    setReviewComment('');
+    setReviewError(null);
+    setReviewSuccess('');
+  }
+
+  function openReviewAction(action: 'verify' | 'comment' | 'needs_review') {
     setReviewAction(action);
     setReviewComment(selected?.adminReviewComment ?? '');
-    setAdminError('');
+    setReviewError(null);
+    setReviewSuccess('');
   }
 
   async function submitReviewAction(event: React.FormEvent) {
@@ -224,14 +234,18 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
     try {
       const updated = reviewAction === 'verify'
         ? await verifyRouteSheet(selected.id, reviewComment)
-        : await markRouteSheetNeedsReview(selected.id, reviewComment);
+        : reviewAction === 'comment'
+          ? await updateRouteSheetAdminComment(selected.id, reviewComment)
+          : await markRouteSheetNeedsReview(selected.id, reviewComment);
       updateRouteSheetInState(updated);
+      setReviewSuccess(reviewAction === 'comment' ? 'Коментар збережено.' : 'Адміністративну перевірку збережено.');
       setReviewAction(null);
       setReviewComment('');
-      setAdminError('');
+      setReviewError(null);
       void refreshData();
     } catch (caught) {
-      setAdminError(caught instanceof Error ? caught.message : 'Не вдалося виконати адміністративну дію.');
+      console.error('[AdminPage] review action failed', caught);
+      setReviewError(caught instanceof Error ? caught.message : 'Не вдалося зберегти адміністративну перевірку.');
     } finally {
       setReviewSubmitting(false);
     }
@@ -239,6 +253,7 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
 
   async function openDetails(id: string) {
     try {
+      resetReviewForm();
       const routeSheet = await getRouteSheetById(id);
       if (routeSheet) setSelected(routeSheet);
     } catch (caught) {
@@ -427,9 +442,9 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
       </section>
 
       {selected && (
-        <div className="modal-backdrop" onMouseDown={() => setSelected(undefined)}>
+        <div className="modal-backdrop" onMouseDown={() => { resetReviewForm(); setSelected(undefined); }}>
           <section className="modal detail-modal" role="dialog" aria-modal="true" aria-label="Деталі маршрутного листа" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="section-heading"><div><span className="eyebrow">Маршрутний лист</span><h2>Деталі запису</h2></div><button type="button" className="text-button" onClick={() => setSelected(undefined)}>Закрити</button></div>
+            <div className="section-heading"><div><span className="eyebrow">Маршрутний лист</span><h2>Деталі запису</h2></div><button type="button" className="text-button" onClick={() => { resetReviewForm(); setSelected(undefined); }}>Закрити</button></div>
             <dl className="detail-grid">
               <DetailItem label="ID запису" value={selected.id} /><DetailItem label="ПІБ" value={selected.fullName} />
               <DetailItem label="Номер жетона" value={selected.badgeNumber} /><DetailItem label="УПП" value={selected.department} />
@@ -457,7 +472,7 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
                   <button type="button" className="small-button" onClick={() => openReviewAction('verify')}>Позначити як перевірено</button>
                 )}
                 {selected.status === 'needs_review' && (
-                  <button type="button" className="small-button secondary" onClick={() => openReviewAction('needs_review')}>Залишити коментар</button>
+                  <button type="button" className="small-button secondary" onClick={() => openReviewAction('comment')}>Залишити коментар</button>
                 )}
                 {selected.status === 'verified' && (
                   <>
@@ -467,6 +482,37 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
                 )}
                 {selected.status === 'active' && <span className="field-hint">Активну незавершену зміну не можна перевірити.</span>}
               </div>
+              {reviewSuccess && <p className="message success compact-review-message" role="status">{reviewSuccess}</p>}
+              {reviewError && <p className="message error compact-review-message" role="alert">{reviewError}</p>}
+              {reviewAction && (
+                <form className="admin-review-form" onSubmit={(event) => void submitReviewAction(event)}>
+                  <label>
+                    Коментар адміністратора
+                    <textarea
+                      value={reviewComment}
+                      disabled={reviewSubmitting}
+                      onChange={(event) => setReviewComment(event.target.value)}
+                      placeholder={reviewAction === 'verify'
+                        ? 'Наприклад: Кілометраж звірено з фото одометра. Порушень не виявлено.'
+                        : reviewAction === 'comment'
+                          ? 'Наприклад: Потрібно додатково звірити фото кінцевого одометра.'
+                          : 'Наприклад: Потрібно додатково перевірити показник кінцевого одометра.'}
+                    />
+                  </label>
+                  <div className="modal-actions">
+                    <button type="submit" disabled={reviewSubmitting}>
+                      {reviewSubmitting
+                        ? (reviewAction === 'verify' ? 'Підтверджуємо...' : 'Зберігаємо...')
+                        : reviewAction === 'verify'
+                          ? 'Підтвердити перевірку'
+                          : reviewAction === 'comment'
+                            ? 'Зберегти коментар'
+                            : 'Залишити на перевірці'}
+                    </button>
+                    <button type="button" className="secondary" disabled={reviewSubmitting} onClick={() => setReviewAction(null)}>Скасувати</button>
+                  </div>
+                </form>
+              )}
             </section>
             <div className="photo-grid detail-photos">
               <figure><figcaption>Фото на початку зміни</figcaption><StoredPhoto photoId={selected.startPhotoId} alt="Одометр на початку зміни" /></figure>
@@ -512,28 +558,6 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
               </table>
             </div>
           </section>
-        </div>
-      )}
-
-      {selected && reviewAction && (
-        <div className="modal-backdrop review-modal-backdrop" onMouseDown={() => setReviewAction(null)}>
-          <form className="modal review-modal" onSubmit={(event) => void submitReviewAction(event)} onMouseDown={(event) => event.stopPropagation()}>
-            <div className="section-heading"><div><span className="eyebrow">Адміністративна перевірка</span><h2>{reviewAction === 'verify' ? 'Позначити як перевірено' : 'Повернути на перевірку'}</h2></div></div>
-            <label>
-              Коментар адміністратора
-              <textarea
-                value={reviewComment}
-                onChange={(event) => setReviewComment(event.target.value)}
-                placeholder={reviewAction === 'verify'
-                  ? 'Наприклад: Кілометраж звірено з фото одометра.'
-                  : 'Наприклад: Потрібно додатково перевірити показник кінцевого одометра.'}
-              />
-            </label>
-            <div className="modal-actions">
-              <button type="submit" disabled={reviewSubmitting}>{reviewSubmitting ? 'Зберігаємо...' : reviewAction === 'verify' ? 'Підтвердити перевірку' : 'Залишити на перевірці'}</button>
-              <button type="button" className="secondary" disabled={reviewSubmitting} onClick={() => setReviewAction(null)}>Скасувати</button>
-            </div>
-          </form>
         </div>
       )}
 
