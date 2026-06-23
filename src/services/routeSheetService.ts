@@ -61,7 +61,9 @@ async function startShiftLocally(input: StartShiftInput): Promise<RouteSheet> {
   }
   if (!input.vehicleNumber.trim()) throw new Error('Вкажіть номер автомобіля.');
   if (!input.startPhotoId) throw new Error('Додайте фото одометра.');
-  if (!Number.isFinite(input.startOdometer) || input.startOdometer <= 0) throw new Error('Кілометраж має бути числом більше 0.');
+  if (!Number.isFinite(input.startOdometer) || input.startOdometer < 0 || !Number.isInteger(input.startOdometer)) {
+    throw new Error('Кілометраж має бути невід’ємним числом.');
+  }
   const now = new Date().toISOString();
   const routeSheet: RouteSheet = {
     id: crypto.randomUUID(),
@@ -70,15 +72,14 @@ async function startShiftLocally(input: StartShiftInput): Promise<RouteSheet> {
     vehicleNumber: normalizeVehicleNumber(input.vehicleNumber),
     startOdometer: input.startOdometer,
     startPhotoId: input.startPhotoId,
-    startOcrValue: input.startOcrValue,
-    startManualEntry: input.startManualEntry,
+    startManualEntry: true,
     status: 'active',
     startedAt: now,
     createdAt: now,
     updatedAt: now,
   };
   routeSheetStorage.add(routeSheet);
-  await localAudit('Зміну розпочато', routeSheet);
+  await localAudit('Початок зміни: кілометраж внесено вручну, фото одометра збережено.', routeSheet);
   await localAudit('Автомобіль вибрано', routeSheet, routeSheet.vehicleNumber);
   return routeSheet;
 }
@@ -91,13 +92,16 @@ async function finishShiftLocally(input: FinishShiftInput): Promise<RouteSheet> 
         || item.crewNumber?.toLocaleUpperCase('uk-UA') === input.crewNumber.trim().toLocaleUpperCase('uk-UA')),
   );
   if (!active) throw new Error('Активну зміну за вказаними даними не знайдено.');
+  if (!input.endPhotoId) throw new Error('Додайте фото одометра.');
+  if (!Number.isFinite(input.endOdometer) || input.endOdometer < 0 || !Number.isInteger(input.endOdometer)) {
+    throw new Error('Кілометраж має бути невід’ємним числом.');
+  }
   if (input.endOdometer < active.startOdometer) throw new Error('Кінцевий кілометраж не може бути меншим за початковий.');
   const distanceKm = input.endOdometer - active.startOdometer;
   const routeSheet: RouteSheet = {
     ...active,
     endOdometer: input.endOdometer,
-    endOcrValue: input.endOcrValue,
-    endManualEntry: input.endManualEntry,
+    endManualEntry: true,
     endPhotoId: input.endPhotoId,
     distanceKm,
     status: distanceKm > 400 ? 'needs_review' : 'completed',
@@ -105,7 +109,7 @@ async function finishShiftLocally(input: FinishShiftInput): Promise<RouteSheet> 
     updatedAt: new Date().toISOString(),
   };
   routeSheetStorage.update(routeSheet);
-  await localAudit(routeSheet.status === 'needs_review' ? 'Зміну завершено: потребує перевірки' : 'Зміну завершено', routeSheet, `Пробіг: ${distanceKm} км`);
+  await localAudit('Завершення зміни: кілометраж внесено вручну, фото одометра збережено.', routeSheet, `Пробіг: ${distanceKm} км`);
   return routeSheet;
 }
 
@@ -164,8 +168,7 @@ export async function startShift(input: StartShiftInput): Promise<RouteSheet> {
       crewNumber: input.crewNumber?.trim() || null,
       vehicleNumber: normalizeVehicleNumber(input.vehicleNumber),
       startOdometer: input.startOdometer,
-      startOcrValue: input.startOcrValue,
-      startManualEntry: input.startManualEntry,
+      startManualEntry: true,
       startPhotoId: input.startPhotoId,
     });
     const routeSheet = extractEntity<RouteSheet>(response, 'routeSheet');
@@ -182,11 +185,12 @@ export async function finishShift(input: FinishShiftInput): Promise<RouteSheet> 
   if (!getOfficerToken()) throw new Error('Сесія завершилась. Увійдіть повторно.');
   if (!isValidBadgeNumber(input.badgeNumber)) throw new Error(BADGE_NUMBER_ERROR);
   try {
-    const { badgeNumber: _badgeNumber, ...finishInput } = input;
     const response = await apiPost<unknown>('/api/route-sheets/finish', {
-      ...finishInput,
       crewNumber: input.crewNumber?.trim() || null,
       vehicleNumber: normalizeVehicleNumber(input.vehicleNumber),
+      endOdometer: input.endOdometer,
+      endPhotoId: input.endPhotoId,
+      endManualEntry: true,
     });
     const routeSheet = extractEntity<RouteSheet>(response, 'routeSheet');
     if (!routeSheet) throw new Error('Не вдалося зберегти маршрутний лист. Некоректна відповідь сервера.');

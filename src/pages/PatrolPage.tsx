@@ -123,12 +123,9 @@ export function PatrolPage() {
           vehicleNumber,
           startOdometer: result.value,
           startPhotoId: result.photoId,
-          startOcrValue: result.ocrValue,
-          startManualEntry: result.manualEntry,
+          startManualEntry: true,
         });
-        setMessage(result.manualEntry
-          ? 'Зміну розпочато. Початковий кілометраж збережено.'
-          : 'Зміну розпочато. Маршрутний лист має статус «Активна зміна».');
+        setMessage('Зміну розпочато. Початковий кілометраж збережено.');
       } else if (flow === 'end') {
         const completed = await finishShift({
           badgeNumber: officer.badgeNumber,
@@ -136,8 +133,7 @@ export function PatrolPage() {
           vehicleNumber,
           endOdometer: result.value,
           endPhotoId: result.photoId,
-          endOcrValue: result.ocrValue,
-          endManualEntry: result.manualEntry,
+          endManualEntry: true,
         });
         setMessage(`Зміну завершено. Пробіг за зміну: ${completed.distanceKm} км.${completed.status === 'needs_review' ? ' Запис потребує перевірки.' : ''}`);
       } else {
@@ -262,7 +258,7 @@ export function PatrolPage() {
             <OdometerInput
               key={flow}
               onSubmit={saveOdometer}
-              submitLabel="Підтвердити"
+              submitLabel={flow === 'start' ? 'Почати зміну' : 'Завершити зміну'}
               type={flow}
             />
           </section>

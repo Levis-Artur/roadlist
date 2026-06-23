@@ -1,7 +1,43 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
-  <title id="title">Службова емблема МВС</title>
-  <path fill="#f5f8fc" stroke="#9fc3e8" stroke-width="2" d="M32 3 39 14l13-2-2 13 11 7-11 7 2 13-13-2-7 11-7-11-13 2 2-13L3 32l11-7-2-13 13 2Z"/>
-  <circle cx="32" cy="32" r="17" fill="#123b67" stroke="#2e6da4" stroke-width="2"/>
-  <path fill="#f5c542" d="M32 17c2.5 5.2 6.2 8.4 11 10.5-2 9.1-5.7 14.4-11 18-5.3-3.6-9-8.9-11-18 4.8-2.1 8.5-5.3 11-10.5Z"/>
-  <path fill="#123b67" d="M32 22.5 35 29h6l-4.8 3.8 1.8 6.1-6-3.6-6 3.6 1.8-6.1L23 29h6Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Емблема патрульної поліції</title>
+  <desc id="desc">Срібна поліцейська зірка з синім щитом і золотим тризубом</desc>
+  <defs>
+    <radialGradient id="silver" cx="50%" cy="42%" r="58%">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.42" stop-color="#eef2f7"/>
+      <stop offset="0.76" stop-color="#bcc7d3"/>
+      <stop offset="1" stop-color="#f8fafc"/>
+    </radialGradient>
+    <linearGradient id="rayShade" x1="18" y1="18" x2="110" y2="110">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.92"/>
+      <stop offset="0.52" stop-color="#d9e0e9" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#8795a7" stop-opacity="0.72"/>
+    </linearGradient>
+    <linearGradient id="shieldBlue" x1="42" y1="32" x2="86" y2="96">
+      <stop offset="0" stop-color="#0f5c8f"/>
+      <stop offset="1" stop-color="#064674"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#00061a" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <rect width="128" height="128" rx="12" fill="#080842"/>
+
+  <g filter="url(#softShadow)">
+    <path fill="url(#silver)" stroke="#f5f7fb" stroke-width="1.2" d="M64 5 68.7 24.8 79 7.2 80.9 27.5 93.4 11.4 92.6 31.8 107.2 17.5 103.8 37.6 120 25.2 114 44.7 125.7 34 117.3 52.6 127 50.2 115.9 64 127 77.8 117.3 75.4 125.7 94 114 83.3 120 102.8 103.8 90.4 107.2 110.5 92.6 96.2 93.4 116.6 80.9 100.5 79 120.8 68.7 103.2 64 123 59.3 103.2 49 120.8 47.1 100.5 34.6 116.6 35.4 96.2 20.8 110.5 24.2 90.4 8 102.8 14 83.3 2.3 94 10.7 75.4 1 77.8 12.1 64 1 50.2 10.7 52.6 2.3 34 14 44.7 8 25.2 24.2 37.6 20.8 17.5 35.4 31.8 34.6 11.4 47.1 27.5 49 7.2 59.3 24.8Z"/>
+    <path fill="none" stroke="url(#rayShade)" stroke-width="2" stroke-linejoin="round" d="M64 5 64 123M79 7.2 49 120.8M93.4 11.4 34.6 116.6M107.2 17.5 20.8 110.5M120 25.2 8 102.8M125.7 34 2.3 94M127 50.2 1 77.8M127 77.8 1 50.2M125.7 94 2.3 34M120 102.8 8 25.2M107.2 110.5 20.8 17.5M93.4 116.6 34.6 11.4M79 120.8 49 7.2"/>
+    <circle cx="64" cy="64" r="38" fill="none" stroke="#ffffff" stroke-opacity="0.68" stroke-width="1.5"/>
+    <circle cx="64" cy="64" r="34" fill="none" stroke="#9eabb9" stroke-opacity="0.55" stroke-width="1"/>
+  </g>
+
+  <g filter="url(#softShadow)">
+    <path fill="#f7c94c" d="M38 30h52v43c0 16.5-11.2 27-26 33-14.8-6-26-16.5-26-33Z"/>
+    <path fill="url(#shieldBlue)" d="M43.5 35.5h41v36.8c0 12.8-8.1 21.7-20.5 27.1-12.4-5.4-20.5-14.3-20.5-27.1Z"/>
+    <path fill="none" stroke="#f5d56b" stroke-width="2.2" d="M43.5 35.5h41v36.8c0 12.8-8.1 21.7-20.5 27.1-12.4-5.4-20.5-14.3-20.5-27.1Z"/>
+
+    <path fill="#ffd86b" d="M64 40c2.8 4.4 3.3 9.7 1.5 16.2l-.1 17.4 5.5-5.2c.4-9.8 2.1-18.3 9.2-24.9 1.7 10.4-.4 20.2-5.5 28.4l4.5-1.8 3 6.3-9.1 2.4-4.8 7.5 3.8 5.7-5.5 3.6-2.5-5.2-2.5 5.2-5.5-3.6 3.8-5.7-4.8-7.5-9.1-2.4 3-6.3 4.5 1.8c-5.1-8.2-7.2-18-5.5-28.4 7.1 6.6 8.8 15.1 9.2 24.9l5.5 5.2-.1-17.4C60.7 49.7 61.2 44.4 64 40Z"/>
+    <path fill="#064674" d="m64 64.1-4 10.4 4 4.2 4-4.2Z" opacity="0.52"/>
+    <path fill="#ffd86b" d="m64 76.6 11 11.3-4.3 4.1-6.7-7.1-6.7 7.1-4.3-4.1Z"/>
+  </g>
 </svg>

@@ -17,8 +17,13 @@ function optionalCrewNumber(value: unknown): string | null {
     : null;
 }
 
-function positiveInteger(value: unknown, message: string): number {
-  if (!Number.isInteger(value) || Number(value) <= 0) throw new AppError(message, 400);
+function requiredPhotoId(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim()) throw new AppError('Додайте фото одометра.', 400);
+  return value.trim();
+}
+
+function nonNegativeInteger(value: unknown, message: string): number {
+  if (!Number.isInteger(value) || Number(value) < 0) throw new AppError(message, 400);
   return Number(value);
 }
 
@@ -26,7 +31,8 @@ export async function startShift(input: StartShiftInput, metadata: RequestMetada
   const badgeNumber = validateBadgeNumber(input.badgeNumber);
   const crewNumber = optionalCrewNumber(input.crewNumber);
   const vehicleNumber = normalizeVehicleNumber(requiredText(input.vehicleNumber, 'Вкажіть номер автомобіля.'));
-  const startOdometer = positiveInteger(input.startOdometer, 'Початковий кілометраж має бути цілим числом більше 0.');
+  const startOdometer = nonNegativeInteger(input.startOdometer, 'Кілометраж має бути невід’ємним числом.');
+  const startPhotoId = requiredPhotoId(input.startPhotoId);
   const duplicate = await prisma.routeSheet.findFirst({ where: { badgeNumber, status: 'active' } });
   if (duplicate) {
     await createAuditLog({ action: 'Спроба почати другу активну зміну', entityType: 'route_sheet', entityId: duplicate.id, badgeNumber, ...metadata });
@@ -46,9 +52,8 @@ export async function startShift(input: StartShiftInput, metadata: RequestMetada
         crewNumber,
         vehicleNumber,
         startOdometer,
-        startPhotoId: input.startPhotoId,
-        startOcrValue: input.startOcrValue,
-        startManualEntry: Boolean(input.startManualEntry),
+        startPhotoId,
+        startManualEntry: true,
         status: 'active',
         startedAt: new Date(),
       },
@@ -59,11 +64,9 @@ export async function startShift(input: StartShiftInput, metadata: RequestMetada
     }
     throw error;
   }
-  if (input.startPhotoId) {
-    await prisma.odometerPhoto.updateMany({ where: { id: input.startPhotoId }, data: { routeSheetId: routeSheet.id, type: 'start' } });
-  }
+  await prisma.odometerPhoto.updateMany({ where: { id: startPhotoId }, data: { routeSheetId: routeSheet.id, type: 'start' } });
   await createAuditLog({
-    action: 'Зміну розпочато', entityType: 'route_sheet', entityId: routeSheet.id, badgeNumber,
+    action: 'Початок зміни: кілометраж внесено вручну, фото одометра збережено.', entityType: 'route_sheet', entityId: routeSheet.id, badgeNumber,
     details: `Екіпаж/підрозділ: ${crewNumber ?? '—'}; авто: ${vehicleNumber}`, ...metadata,
   });
   await createAuditLog({ action: 'Автомобіль вибрано', entityType: 'route_sheet', entityId: routeSheet.id, badgeNumber, details: vehicleNumber, ...metadata });
@@ -74,7 +77,8 @@ export async function finishShift(input: FinishShiftInput, metadata: RequestMeta
   const badgeNumber = validateBadgeNumber(input.badgeNumber);
   const crewNumber = optionalCrewNumber(input.crewNumber);
   const vehicleNumber = normalizeVehicleNumber(requiredText(input.vehicleNumber, 'Вкажіть номер автомобіля.'));
-  const endOdometer = positiveInteger(input.endOdometer, 'Кінцевий кілометраж має бути цілим числом більше 0.');
+  const endOdometer = nonNegativeInteger(input.endOdometer, 'Кілометраж має бути невід’ємним числом.');
+  const endPhotoId = requiredPhotoId(input.endPhotoId);
   const active = await prisma.routeSheet.findFirst({
     where: { badgeNumber, vehicleNumber, status: 'active', ...(crewNumber ? { crewNumber } : {}) },
   });
@@ -89,18 +93,15 @@ export async function finishShift(input: FinishShiftInput, metadata: RequestMeta
     data: {
       endOdometer,
       distanceKm,
-      endPhotoId: input.endPhotoId,
-      endOcrValue: input.endOcrValue,
-      endManualEntry: Boolean(input.endManualEntry),
+      endPhotoId,
+      endManualEntry: true,
       status,
       endedAt: new Date(),
     },
   });
-  if (input.endPhotoId) {
-    await prisma.odometerPhoto.updateMany({ where: { id: input.endPhotoId }, data: { routeSheetId: routeSheet.id, type: 'end' } });
-  }
+  await prisma.odometerPhoto.updateMany({ where: { id: endPhotoId }, data: { routeSheetId: routeSheet.id, type: 'end' } });
   await createAuditLog({
-    action: status === 'needs_review' ? 'Зміну завершено: потребує перевірки' : 'Зміну завершено',
+    action: 'Завершення зміни: кілометраж внесено вручну, фото одометра збережено.',
     entityType: 'route_sheet', entityId: routeSheet.id, badgeNumber,
     details: `Пробіг: ${distanceKm} км`, ...metadata,
   });

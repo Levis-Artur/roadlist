@@ -280,9 +280,8 @@ export function AdminPage({ onLogout }: { onLogout: () => void }) {
               <DetailItem label="Завершення зміни" value={formatDate(selected.endedAt)} /><DetailItem label="Початковий кілометраж" value={`${selected.startOdometer} км`} />
               <DetailItem label="Кінцевий кілометраж" value={selected.endOdometer === undefined ? '—' : `${selected.endOdometer} км`} />
               <DetailItem label="Пробіг" value={selected.distanceKm === undefined ? '—' : `${selected.distanceKm} км`} />
-              <DetailItem label="OCR на початку" value={selected.startOcrValue ?? '—'} /><DetailItem label="OCR у кінці" value={selected.endOcrValue ?? '—'} />
-              <DetailItem label="Ручне внесення на початку" value={selected.startManualEntry ? 'Так' : 'Ні'} />
-              <DetailItem label="Ручне внесення в кінці" value={selected.endManualEntry === undefined ? '—' : selected.endManualEntry ? 'Так' : 'Ні'} />
+              <DetailItem label="Спосіб внесення на початку" value={selected.startManualEntry ? 'Внесено вручну' : '—'} />
+              <DetailItem label="Спосіб внесення в кінці" value={selected.endManualEntry === undefined ? '—' : selected.endManualEntry ? 'Внесено вручну' : '—'} />
               <DetailItem label="Статус" value={<span className={`status ${selected.status}`}>{statusLabels[selected.status]}</span>} />
             </dl>
             <div className="photo-grid detail-photos">
