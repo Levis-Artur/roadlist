@@ -101,46 +101,143 @@ JOIN "Department" d ON d."name" = source."department"
 ON CONFLICT ("departmentId", "name") DO NOTHING;
 
 UPDATE "Officer" o
-SET "departmentId" = d."id",
-    "departmentName" = d."name",
-    "departmentUnitId" = du."id",
-    "departmentUnitName" = COALESCE(du."name", o."unit")
-FROM "Department" d
-LEFT JOIN "DepartmentUnit" du ON du."departmentId" = d."id" AND du."name" = o."unit"
-WHERE d."name" = o."department";
+SET "departmentId" = (
+      SELECT d."id"
+      FROM "Department" d
+      WHERE d."name" = o."department"
+      LIMIT 1
+    ),
+    "departmentName" = (
+      SELECT d."name"
+      FROM "Department" d
+      WHERE d."name" = o."department"
+      LIMIT 1
+    ),
+    "departmentUnitId" = (
+      SELECT du."id"
+      FROM "DepartmentUnit" du
+      JOIN "Department" d ON d."id" = du."departmentId"
+      WHERE d."name" = o."department"
+        AND du."name" = o."unit"
+      LIMIT 1
+    ),
+    "departmentUnitName" = COALESCE((
+      SELECT du."name"
+      FROM "DepartmentUnit" du
+      JOIN "Department" d ON d."id" = du."departmentId"
+      WHERE d."name" = o."department"
+        AND du."name" = o."unit"
+      LIMIT 1
+    ), o."unit")
+WHERE o."department" IS NOT NULL;
 
 UPDATE "Vehicle" v
-SET "departmentId" = d."id",
-    "departmentName" = d."name",
-    "departmentUnitId" = du."id",
-    "departmentUnitName" = COALESCE(du."name", v."unit")
-FROM "Department" d
-LEFT JOIN "DepartmentUnit" du ON du."departmentId" = d."id" AND du."name" = v."unit"
-WHERE d."name" = v."department";
+SET "departmentId" = (
+      SELECT d."id"
+      FROM "Department" d
+      WHERE d."name" = v."department"
+      LIMIT 1
+    ),
+    "departmentName" = (
+      SELECT d."name"
+      FROM "Department" d
+      WHERE d."name" = v."department"
+      LIMIT 1
+    ),
+    "departmentUnitId" = (
+      SELECT du."id"
+      FROM "DepartmentUnit" du
+      JOIN "Department" d ON d."id" = du."departmentId"
+      WHERE d."name" = v."department"
+        AND du."name" = v."unit"
+      LIMIT 1
+    ),
+    "departmentUnitName" = COALESCE((
+      SELECT du."name"
+      FROM "DepartmentUnit" du
+      JOIN "Department" d ON d."id" = du."departmentId"
+      WHERE d."name" = v."department"
+        AND du."name" = v."unit"
+      LIMIT 1
+    ), v."unit")
+WHERE v."department" IS NOT NULL;
 
 UPDATE "RouteSheet" r
-SET "departmentId" = d."id",
-    "departmentName" = d."name",
-    "departmentUnitId" = du."id",
-    "departmentUnitName" = COALESCE(du."name", r."unit")
-FROM "Department" d
-LEFT JOIN "DepartmentUnit" du ON du."departmentId" = d."id" AND du."name" = r."unit"
-WHERE d."name" = r."department";
+SET "departmentId" = (
+      SELECT d."id"
+      FROM "Department" d
+      WHERE d."name" = r."department"
+      LIMIT 1
+    ),
+    "departmentName" = (
+      SELECT d."name"
+      FROM "Department" d
+      WHERE d."name" = r."department"
+      LIMIT 1
+    ),
+    "departmentUnitId" = (
+      SELECT du."id"
+      FROM "DepartmentUnit" du
+      JOIN "Department" d ON d."id" = du."departmentId"
+      WHERE d."name" = r."department"
+        AND du."name" = r."unit"
+      LIMIT 1
+    ),
+    "departmentUnitName" = COALESCE((
+      SELECT du."name"
+      FROM "DepartmentUnit" du
+      JOIN "Department" d ON d."id" = du."departmentId"
+      WHERE d."name" = r."department"
+        AND du."name" = r."unit"
+      LIMIT 1
+    ), r."unit")
+WHERE r."department" IS NOT NULL;
 
 UPDATE "VehicleMonthlyRouteSheet" m
-SET "departmentId" = d."id",
-    "departmentName" = d."name",
-    "departmentUnitId" = du."id",
-    "departmentUnitName" = COALESCE(du."name", m."unit")
-FROM "Department" d
-LEFT JOIN "DepartmentUnit" du ON du."departmentId" = d."id" AND du."name" = m."unit"
-WHERE d."name" = m."department";
+SET "departmentId" = (
+      SELECT d."id"
+      FROM "Department" d
+      WHERE d."name" = m."department"
+      LIMIT 1
+    ),
+    "departmentName" = (
+      SELECT d."name"
+      FROM "Department" d
+      WHERE d."name" = m."department"
+      LIMIT 1
+    ),
+    "departmentUnitId" = (
+      SELECT du."id"
+      FROM "DepartmentUnit" du
+      JOIN "Department" d ON d."id" = du."departmentId"
+      WHERE d."name" = m."department"
+        AND du."name" = m."unit"
+      LIMIT 1
+    ),
+    "departmentUnitName" = COALESCE((
+      SELECT du."name"
+      FROM "DepartmentUnit" du
+      JOIN "Department" d ON d."id" = du."departmentId"
+      WHERE d."name" = m."department"
+        AND du."name" = m."unit"
+      LIMIT 1
+    ), m."unit")
+WHERE m."department" IS NOT NULL;
 
 UPDATE "AdminUser" a
-SET "departmentId" = d."id",
-    "departmentName" = d."name"
-FROM "Department" d
-WHERE d."name" = a."department";
+SET "departmentId" = (
+      SELECT d."id"
+      FROM "Department" d
+      WHERE d."name" = a."department"
+      LIMIT 1
+    ),
+    "departmentName" = (
+      SELECT d."name"
+      FROM "Department" d
+      WHERE d."name" = a."department"
+      LIMIT 1
+    )
+WHERE a."department" IS NOT NULL;
 
 UPDATE "VehicleTransferHistory"
 SET "fromDepartmentName" = "fromDepartment",
