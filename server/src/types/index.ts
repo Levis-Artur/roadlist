@@ -7,6 +7,7 @@ export interface AdminTokenPayload {
   username: string;
   role: AdminRole;
   department?: string | null;
+  unit?: string | null;
   mustChangePassword?: boolean;
 }
 
@@ -15,6 +16,7 @@ export interface AdminTwoFactorPendingPayload {
   username: string;
   role: AdminRole;
   department?: string | null;
+  unit?: string | null;
   purpose: 'ADMIN_2FA_PENDING';
   mustChangePassword?: boolean;
 }
@@ -26,6 +28,7 @@ export interface RequestMetadata {
   actorUsername?: string;
   actorRole?: AdminRole;
   actorDepartment?: string | null;
+  actorUnit?: string | null;
 }
 
 export interface StartShiftInput {
@@ -55,6 +58,7 @@ export interface RouteSheetFilters {
   badgeNumber?: string;
   vehicleNumber?: string;
   department?: string;
+  unit?: string;
   from?: string;
   to?: string;
   search?: string;
@@ -69,4 +73,5 @@ export interface AuditLogInput extends RequestMetadata {
   targetAdminId?: string;
   targetRole?: AdminRole;
   targetDepartment?: string | null;
+  targetUnit?: string | null;
 }

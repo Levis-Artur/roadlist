@@ -3,14 +3,15 @@ export interface Officer {
   badgeNumber: string;
   fullName: string;
   department: string;
+  unit?: string | null;
   isActive?: boolean;
   hasPin?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
 
-export interface OfficerFilters { search?: string; department?: string; isActive?: boolean }
-export interface CreateOfficerInput { badgeNumber: string; fullName: string; department: string; pin: string; isActive: boolean }
+export interface OfficerFilters { search?: string; department?: string; unit?: string; isActive?: boolean }
+export interface CreateOfficerInput { badgeNumber: string; fullName: string; department: string; unit?: string | null; pin: string; isActive: boolean }
 export type UpdateOfficerInput = Partial<CreateOfficerInput>;
 
 export type RouteSheetStatus = 'active' | 'completed' | 'needs_review' | 'verified';
@@ -22,6 +23,7 @@ export interface AdminUser {
   fullName: string;
   role: AdminRole;
   department?: string | null;
+  unit?: string | null;
   isActive: boolean;
   mustChangePassword?: boolean;
   passwordChangedAt?: string | null;
@@ -40,6 +42,8 @@ export interface AdminUser {
 export interface RouteSheetFilters {
   status?: RouteSheetStatus;
   search?: string;
+  department?: string;
+  unit?: string;
 }
 
 export interface Vehicle {
@@ -49,6 +53,7 @@ export interface Vehicle {
   brand: string;
   model: string;
   department: string;
+  unit?: string | null;
   isActive: boolean;
   availability?: VehicleAvailability;
   createdAt?: string;
@@ -64,9 +69,25 @@ export interface VehicleAvailability {
   monthlyRouteSheetYear?: number | null;
 }
 
-export interface VehicleFilters { search?: string; department?: string; isActive?: boolean }
-export interface CreateVehicleInput { displayPlateNumber: string; brand: string; model: string; department: string; isActive: boolean }
+export interface VehicleFilters { search?: string; department?: string; unit?: string; isActive?: boolean }
+export interface CreateVehicleInput { displayPlateNumber: string; brand: string; model: string; department: string; unit?: string | null; isActive: boolean }
 export type UpdateVehicleInput = Partial<CreateVehicleInput>;
+
+export interface VehicleTransferHistory {
+  id: string;
+  vehicleId: string;
+  vehicleNumber: string;
+  displayVehicleNumber?: string | null;
+  fromDepartment?: string | null;
+  fromUnit?: string | null;
+  toDepartment: string;
+  toUnit?: string | null;
+  comment?: string | null;
+  transferredByAdminId?: string | null;
+  transferredByUsername?: string | null;
+  transferredByRole?: string | null;
+  transferredAt: string;
+}
 
 export interface RouteSheet {
   id: string;
@@ -74,6 +95,7 @@ export interface RouteSheet {
   badgeNumber: string;
   fullName: string;
   department: string;
+  unit?: string | null;
   crewNumber?: string | null;
   vehicleId?: string | null;
   vehicleNumber: string;
@@ -140,6 +162,7 @@ export interface MonthlyRouteSheet {
   vehicleBrand: string;
   vehicleModel: string;
   department: string;
+  unit?: string | null;
   year: number;
   month: number;
   status: MonthlyRouteSheetStatus;
@@ -164,6 +187,7 @@ export interface MonthlyRouteSheetFilters {
   vehicleId?: string;
   status?: MonthlyRouteSheetStatus;
   department?: string;
+  unit?: string;
 }
 
 export interface AuditLog {
@@ -173,6 +197,8 @@ export interface AuditLog {
   entityId?: string;
   badgeNumber?: string;
   details?: string;
+  actorUnit?: string | null;
+  targetUnit?: string | null;
   createdAt: string;
 }
 

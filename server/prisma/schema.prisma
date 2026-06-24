@@ -12,6 +12,7 @@ model Officer {
   badgeNumber String   @unique
   fullName    String
   department  String
+  unit        String?
   pinHash     String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -25,12 +26,35 @@ model Vehicle {
   brand              String
   model              String
   department         String
+  unit               String?
   isActive           Boolean  @default(true)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   monthlyRouteSheets VehicleMonthlyRouteSheet[]
+  transferHistory    VehicleTransferHistory[]
 
   @@index([department, isActive])
+}
+
+model VehicleTransferHistory {
+  id                    String   @id @default(uuid())
+  vehicleId             String
+  vehicleNumber         String
+  displayVehicleNumber  String?
+  fromDepartment        String?
+  fromUnit              String?
+  toDepartment          String
+  toUnit                String?
+  comment               String?
+  transferredByAdminId  String?
+  transferredByUsername String?
+  transferredByRole     String?
+  transferredAt         DateTime @default(now())
+  vehicle               Vehicle  @relation(fields: [vehicleId], references: [id])
+
+  @@index([vehicleId])
+  @@index([toDepartment, toUnit])
+  @@index([transferredAt])
 }
 
 model VehicleMonthlyRouteSheet {
@@ -41,6 +65,7 @@ model VehicleMonthlyRouteSheet {
   vehicleBrand         String
   vehicleModel         String
   department           String
+  unit                 String?
   year                 Int
   month                Int
   status               String       @default("open")
@@ -70,6 +95,7 @@ model RouteSheet {
   badgeNumber          String
   fullName             String
   department           String
+  unit                 String?
   crewNumber           String?
   vehicleId            String?
   vehicleNumber        String
@@ -127,6 +153,7 @@ model AdminUser {
   fullName            String
   role                String
   department          String?
+  unit                String?
   passwordHash        String
   isActive            Boolean   @default(true)
   mustChangePassword  Boolean   @default(false)
@@ -163,9 +190,11 @@ model AuditLog {
   actorUsername     String?
   actorRole         String?
   actorDepartment   String?
+  actorUnit         String?
   targetAdminId     String?
   targetRole        String?
   targetDepartment  String?
+  targetUnit        String?
   createdAt         DateTime @default(now())
 
   @@index([createdAt])

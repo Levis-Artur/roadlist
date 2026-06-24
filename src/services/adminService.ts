@@ -148,6 +148,7 @@ export async function createAdminUser(input: {
   fullName: string;
   role: AdminRole;
   department?: string | null;
+  unit?: string | null;
   password: string;
   isActive: boolean;
 }): Promise<AdminUser> {
@@ -159,6 +160,7 @@ export async function updateAdminUser(id: string, input: Partial<{
   fullName: string;
   role: AdminRole;
   department?: string | null;
+  unit?: string | null;
   password: string;
   isActive: boolean;
 }>): Promise<AdminUser> {

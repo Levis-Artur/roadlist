@@ -71,6 +71,7 @@ async function getOrCreateMonthlyRouteSheet(
       vehicleBrand: vehicle.brand,
       vehicleModel: vehicle.model,
       department: vehicle.department,
+      unit: vehicle.unit,
       year,
       month,
       status: 'open',
@@ -147,6 +148,7 @@ export async function startShift(input: StartShiftInput, metadata: RequestMetada
           badgeNumber,
           fullName: officer.fullName,
           department: officer.department,
+          unit: vehicle.unit ?? officer.unit,
           crewNumber,
           vehicleId: vehicle.id,
           vehicleNumber,
@@ -240,7 +242,7 @@ export async function finishShift(input: FinishShiftInput, metadata: RequestMeta
 
 function assertDepartmentAccess(actor: AdminTokenPayload | undefined, department: string) {
   if (actor?.role === 'REGIONAL_ADMIN' && department !== actor.department) {
-    throw new AppError('Недостатньо прав для доступу до чужого УПП.', 403);
+    throw new AppError('Недостатньо прав для доступу до даних іншого управління', 403);
   }
 }
 
@@ -251,6 +253,7 @@ export async function listRouteSheets(filters: RouteSheetFilters, actor?: AdminT
   if (filters.vehicleNumber) where.vehicleNumber = normalizeVehicleNumber(filters.vehicleNumber);
   if (actor?.role === 'REGIONAL_ADMIN') where.department = actor.department ?? '';
   else if (filters.department) where.department = { contains: filters.department, mode: 'insensitive' };
+  if (filters.unit) where.unit = { contains: filters.unit, mode: 'insensitive' };
   if (filters.search) {
     where.OR = [
       { fullName: { contains: filters.search, mode: 'insensitive' } },

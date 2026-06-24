@@ -1,4 +1,4 @@
-import type { CreateVehicleInput, UpdateVehicleInput, Vehicle, VehicleFilters } from '../types';
+import type { CreateVehicleInput, UpdateVehicleInput, Vehicle, VehicleFilters, VehicleTransferHistory } from '../types';
 import { normalizeVehicleNumber } from '../utils/vehicleNumber';
 import { apiDelete, apiGet, apiPatch, apiPost, isApiUnavailableError } from './apiClient';
 import { addAuditLog } from './auditService';
@@ -9,10 +9,11 @@ import { routeSheetStorage } from '../storage/routeSheetStorage';
 const VEHICLE_STORAGE_KEY = 'patrol-vehicle-directory';
 interface VehiclesResponse { success: boolean; vehicles: Vehicle[] }
 interface VehicleResponse { success: boolean; vehicle: Vehicle }
+interface VehicleTransferHistoryResponse { success: boolean; transferHistory: VehicleTransferHistory[] }
 
 function initialVehicles(): Vehicle[] {
   const now = new Date().toISOString();
-  return [{ id: 'local-vehicle-1', plateNumber: 'AA5200MH', displayPlateNumber: 'АА5200МН', brand: 'Hyundai', model: 'Sonata', department: 'УПП у Волинській області', isActive: true, createdAt: now, updatedAt: now }];
+  return [{ id: 'local-vehicle-1', plateNumber: 'AA5200MH', displayPlateNumber: 'АА5200МН', brand: 'Hyundai', model: 'Sonata', department: 'УПП у Волинській області', unit: null, isActive: true, createdAt: now, updatedAt: now }];
 }
 
 function localVehicles(): Vehicle[] {
@@ -38,6 +39,7 @@ function filteredLocalVehicles(filters: VehicleFilters) {
   const normalized = search ? normalizeVehicleNumber(search) : '';
   return localVehicles().filter((vehicle) => (!search || `${vehicle.brand} ${vehicle.model} ${vehicle.displayPlateNumber}`.toLocaleLowerCase('uk-UA').includes(search) || vehicle.plateNumber.includes(normalized))
     && (!filters.department || vehicle.department.toLocaleLowerCase('uk-UA').includes(filters.department.toLocaleLowerCase('uk-UA')))
+    && (!filters.unit || (vehicle.unit ?? '').toLocaleLowerCase('uk-UA').includes(filters.unit.toLocaleLowerCase('uk-UA')))
     && (filters.isActive === undefined || vehicle.isActive === filters.isActive));
 }
 
@@ -121,5 +123,37 @@ export async function deactivateVehicle(id: string): Promise<void> {
     const vehicles = localVehicles().map((item) => item.id === id ? { ...item, isActive: false, updatedAt: new Date().toISOString() } : item);
     saveLocalVehicles(vehicles);
     await addAuditLog({ action: 'Деактивовано автомобіль', entityType: 'vehicle', entityId: id, details: vehicles.find((item) => item.id === id)?.plateNumber }).catch(() => undefined);
+  }
+}
+
+export async function transferVehicle(id: string, input: { newDepartment: string; newUnit?: string | null; comment?: string | null }): Promise<Vehicle> {
+  try {
+    const vehicle = extractEntity<Vehicle>(await apiPost<unknown>(`/api/vehicles/${id}/transfer`, input), 'vehicle');
+    if (!vehicle) throw new Error('Не вдалося перемістити автомобіль. Некоректна відповідь сервера.');
+    return vehicle;
+  } catch (error) {
+    if (!isApiUnavailableError(error)) throw error;
+    const vehicles = localVehicles();
+    const index = vehicles.findIndex((item) => item.id === id);
+    if (index < 0) throw new Error('Автомобіль не знайдено.');
+    const activeShift = routeSheetStorage.getAll().find((item) => item.vehicleNumber === vehicles[index].plateNumber && item.status === 'active');
+    if (activeShift) throw new Error('Неможливо перемістити автомобіль: по ньому є активна незавершена зміна.');
+    const updated = { ...vehicles[index], department: input.newDepartment, unit: input.newUnit ?? null, updatedAt: new Date().toISOString() };
+    vehicles[index] = updated;
+    saveLocalVehicles(vehicles);
+    await addAuditLog({ action: 'Автомобіль переміщено між управліннями', entityType: 'vehicle', entityId: id, details: `${input.newDepartment}${input.newUnit ? ` / ${input.newUnit}` : ''}` }).catch(() => undefined);
+    return updated;
+  }
+}
+
+export async function getVehicleTransferHistory(id: string): Promise<VehicleTransferHistory[]> {
+  try {
+    return extractList<VehicleTransferHistory>(
+      await apiGet<VehicleTransferHistoryResponse>(`/api/vehicles/${encodeURIComponent(id)}/transfer-history`),
+      'transferHistory',
+    );
+  } catch (error) {
+    if (!isApiUnavailableError(error)) throw error;
+    return [];
   }
 }

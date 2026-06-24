@@ -32,6 +32,20 @@ export async function getAvailablePhoto(id: string) {
   return photo;
 }
 
+export async function getAvailablePhotoWithRouteSheet(id: string) {
+  const photo = await prisma.odometerPhoto.findFirst({
+    where: { id, deletedAt: null },
+    include: { routeSheet: true },
+  });
+  if (!photo) return null;
+  if (photo.expiresAt.getTime() < Date.now()) {
+    await prisma.odometerPhoto.update({ where: { id }, data: { deletedAt: new Date() } });
+    await fs.unlink(photo.filePath).catch(() => undefined);
+    return null;
+  }
+  return photo;
+}
+
 export async function recognizePhoto(id: string, type: PhotoType) {
   const photo = await getAvailablePhoto(id);
   if (!photo) throw new AppError('Фото недоступне або було видалене', 404);

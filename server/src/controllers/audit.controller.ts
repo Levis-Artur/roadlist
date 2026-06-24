@@ -25,6 +25,7 @@ export async function createAuditLogController(request: Request, response: Respo
       actorUsername: request.admin?.username,
       actorRole: request.admin?.role,
       actorDepartment: request.admin?.department ?? null,
+      actorUnit: request.admin?.unit ?? null,
     });
     response.status(201).json({ success: true, auditLog });
   } catch (error) { next(error); }

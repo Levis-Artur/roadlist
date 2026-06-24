@@ -85,6 +85,7 @@ function filteredLocalOfficers(filters: OfficerFilters) {
   const search = filters.search?.trim().toLocaleLowerCase('uk-UA');
   return localOfficers().filter((officer) => (!search || `${officer.fullName} ${officer.badgeNumber}`.toLocaleLowerCase('uk-UA').includes(search))
     && (!filters.department || officer.department.toLocaleLowerCase('uk-UA').includes(filters.department.toLocaleLowerCase('uk-UA')))
+    && (!filters.unit || (officer.unit ?? '').toLocaleLowerCase('uk-UA').includes(filters.unit.toLocaleLowerCase('uk-UA')))
     && (filters.isActive === undefined || Boolean(officer.isActive) === filters.isActive));
 }
 
@@ -113,7 +114,7 @@ export async function createOfficer(input: CreateOfficerInput): Promise<Officer>
     if (officers.some((item) => item.badgeNumber === input.badgeNumber.trim())) throw new Error('Патрульний з таким номером жетона вже існує');
     const now = new Date().toISOString();
     const { pin, ...safeInput } = input;
-    const officer: Officer = { ...safeInput, hasPin: true, badgeNumber: input.badgeNumber.trim(), fullName: input.fullName.trim(), department: input.department.trim(), id: generateId('officer'), createdAt: now, updatedAt: now };
+    const officer: Officer = { ...safeInput, hasPin: true, badgeNumber: input.badgeNumber.trim(), fullName: input.fullName.trim(), department: input.department.trim(), unit: input.unit?.trim() || null, id: generateId('officer'), createdAt: now, updatedAt: now };
     saveLocalOfficers([...officers, officer]);
     const hashes = await pinHashesWithDefaults(); hashes[officer.badgeNumber] = await hashPin(pin); localStorage.setItem(OFFICER_PIN_STORAGE_KEY, JSON.stringify(hashes));
     await addAuditLog({ action: 'Створено патрульного', entityType: 'officer', entityId: officer.id, badgeNumber: officer.badgeNumber, details: `${officer.fullName}; ${officer.department}` }).catch(() => undefined);
@@ -175,7 +176,7 @@ export async function loginOfficer(badgeNumber: string, pin: string): Promise<{ 
       throw new Error('Невірний номер жетона або PIN');
     }
     const token = `local-officer-token:${normalizedBadge}`;
-    const safeOfficer: Officer = { badgeNumber: officer.badgeNumber, fullName: officer.fullName, department: officer.department };
+    const safeOfficer: Officer = { badgeNumber: officer.badgeNumber, fullName: officer.fullName, department: officer.department, unit: officer.unit };
     sessionStorage.setItem(OFFICER_TOKEN_KEY, token);
     sessionStorage.setItem(OFFICER_SESSION_KEY, JSON.stringify(safeOfficer));
     await addAuditLog({ action: 'Вхід патрульного успішний', entityType: 'officer', badgeNumber: normalizedBadge, details: officer.fullName }).catch(() => undefined);

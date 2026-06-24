@@ -6,6 +6,7 @@ import { getPhotoController, recognizePhotoController, uploadPhotoController } f
 import { env } from '../config/env.js';
 import { AppError } from '../middleware/errorHandler.js';
 import { createId } from '../utils/id.js';
+import { authOfficer } from '../middleware/authOfficer.js';
 
 fs.mkdirSync(env.uploadDir, { recursive: true });
 
@@ -28,6 +29,6 @@ const upload = multer({
 });
 
 export const photoRouter = Router();
-photoRouter.post('/upload', upload.single('photo'), uploadPhotoController);
+photoRouter.post('/upload', authOfficer, upload.single('photo'), uploadPhotoController);
 photoRouter.get('/:id', getPhotoController);
-photoRouter.post('/:id/ocr', recognizePhotoController);
+photoRouter.post('/:id/ocr', authOfficer, recognizePhotoController);

@@ -51,6 +51,7 @@ function actorMetadata(actor: AdminTokenPayload | undefined, metadata: RequestMe
     actorUsername: actor?.username,
     actorRole: actor?.role,
     actorDepartment: actor?.department ?? null,
+    actorUnit: actor?.unit ?? null,
   };
 }
 
@@ -87,19 +88,24 @@ function uniqueAdminError(error: unknown): never {
   throw error;
 }
 
-function fullAdminToken(admin: { id: string; username: string; role: string; department: string | null; mustChangePassword: boolean }) {
+function optionalText(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function fullAdminToken(admin: { id: string; username: string; role: string; department: string | null; unit?: string | null; mustChangePassword: boolean }) {
   const role = validateRole(admin.role);
-  const payload: AdminTokenPayload = { adminId: admin.id, username: admin.username, role, department: admin.department, mustChangePassword: admin.mustChangePassword };
+  const payload: AdminTokenPayload = { adminId: admin.id, username: admin.username, role, department: admin.department, unit: admin.unit ?? null, mustChangePassword: admin.mustChangePassword };
   return jwt.sign(payload, env.jwtSecret, { expiresIn: env.adminJwtExpiresIn as SignOptions['expiresIn'], subject: admin.id });
 }
 
-function pendingAdminToken(admin: { id: string; username: string; role: string; department: string | null; mustChangePassword: boolean }) {
+function pendingAdminToken(admin: { id: string; username: string; role: string; department: string | null; unit?: string | null; mustChangePassword: boolean }) {
   const role = validateRole(admin.role);
   const payload: AdminTwoFactorPendingPayload = {
     adminId: admin.id,
     username: admin.username,
     role,
     department: admin.department,
+    unit: admin.unit ?? null,
     purpose: 'ADMIN_2FA_PENDING',
     mustChangePassword: admin.mustChangePassword,
   };
@@ -125,7 +131,7 @@ export async function verifyAdminToken(tokenValue: unknown): Promise<AdminTokenP
   if (!admin || admin.username !== payload.username || !isAdminRole(admin.role)) {
     throw new AppError('Потрібна авторизація адміністратора', 401);
   }
-  return { adminId: admin.id, username: admin.username, role: validateRole(admin.role), department: admin.department, mustChangePassword: admin.mustChangePassword };
+  return { adminId: admin.id, username: admin.username, role: validateRole(admin.role), department: admin.department, unit: admin.unit, mustChangePassword: admin.mustChangePassword };
 }
 
 function checkIpRateLimit(ipAddress?: string) {
@@ -386,6 +392,7 @@ export async function createAdminUser(actor: AdminTokenPayload, input: Record<st
   const username = required(input.username, 'Логін обов’язковий.');
   const fullName = required(input.fullName, 'ПІБ обов’язкове.');
   const department = validateDepartment(role, input.department);
+  const unit = role === 'REGIONAL_ADMIN' ? optionalText(input.unit) : null;
   const password = validatePasswordPolicy(input.password);
   try {
     const admin = await prisma.adminUser.create({
@@ -394,6 +401,7 @@ export async function createAdminUser(actor: AdminTokenPayload, input: Record<st
         fullName,
         role,
         department,
+        unit,
         passwordHash: await bcrypt.hash(password, 10),
         isActive: input.isActive !== false,
         mustChangePassword: true,
@@ -409,6 +417,7 @@ export async function createAdminUser(actor: AdminTokenPayload, input: Record<st
       targetAdminId: admin.id,
       targetRole: role,
       targetDepartment: department,
+      targetUnit: unit,
       ...actorMetadata(actor, metadata),
     });
     return publicAdmin(admin);
@@ -438,6 +447,7 @@ export async function updateAdminUser(actor: AdminTokenPayload, id: string, inpu
         fullName: input.fullName === undefined ? undefined : required(input.fullName, 'ПІБ обов’язкове.'),
         role: nextRole,
         department: input.department === undefined && nextRole === currentRole ? undefined : validateDepartment(nextRole, input.department ?? current.department),
+        unit: nextRole === 'REGIONAL_ADMIN' ? input.unit === undefined ? undefined : optionalText(input.unit) : null,
         isActive: input.isActive === undefined ? undefined : Boolean(input.isActive),
       },
     });
@@ -449,6 +459,7 @@ export async function updateAdminUser(actor: AdminTokenPayload, id: string, inpu
       targetAdminId: admin.id,
       targetRole: validateRole(admin.role),
       targetDepartment: admin.department,
+      targetUnit: admin.unit,
       ...actorMetadata(actor, metadata),
     });
     return publicAdmin(admin);

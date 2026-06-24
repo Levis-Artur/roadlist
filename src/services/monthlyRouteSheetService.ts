@@ -48,6 +48,7 @@ function localMonthlyRouteSheets(filters: MonthlyRouteSheetFilters = {}): Monthl
       vehicleBrand: first.vehicleBrand || 'Службовий автомобіль',
       vehicleModel: first.vehicleModel || '',
       department: first.department,
+      unit: first.unit ?? null,
       year: date.getFullYear(),
       month: date.getMonth() + 1,
       status: sorted.some((entry) => entry.status === 'active') ? 'open' : 'open',
@@ -67,7 +68,8 @@ function localMonthlyRouteSheets(filters: MonthlyRouteSheetFilters = {}): Monthl
     && (!filters.month || item.month === filters.month)
     && (!filters.vehicleId || item.vehicleId === filters.vehicleId)
     && (!filters.status || item.status === filters.status)
-    && (!filters.department || item.department.toLocaleLowerCase('uk-UA').includes(filters.department.toLocaleLowerCase('uk-UA'))));
+    && (!filters.department || item.department.toLocaleLowerCase('uk-UA').includes(filters.department.toLocaleLowerCase('uk-UA')))
+    && (!filters.unit || (item.unit ?? '').toLocaleLowerCase('uk-UA').includes(filters.unit.toLocaleLowerCase('uk-UA'))));
 }
 
 export async function getMonthlyRouteSheets(filters: MonthlyRouteSheetFilters = {}): Promise<MonthlyRouteSheet[]> {

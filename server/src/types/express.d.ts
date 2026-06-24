@@ -6,6 +6,7 @@ declare global {
         badgeNumber: string;
         fullName: string;
         department: string;
+        unit?: string | null;
       };
     }
   }

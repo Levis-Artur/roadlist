@@ -36,13 +36,18 @@ export async function saveOdometerPhoto(file: File, type: 'start' | 'end'): Prom
   }
 }
 
-export function getOdometerPhotoUrl(photoId: string): string {
-  return isLocalPhotoId(photoId) ? '' : getApiUrl(`/api/photos/${encodeURIComponent(photoId)}`);
+function authToken(): string {
+  return sessionStorage.getItem('admin_token') || sessionStorage.getItem('officer_token') || '';
 }
 
 export async function getOdometerPhoto(photoId: string): Promise<string | null> {
   if (isLocalPhotoId(photoId)) return getPhoto(rawLocalPhotoId(photoId));
-  return getOdometerPhotoUrl(photoId);
+  const token = authToken();
+  const response = await fetch(getApiUrl(`/api/photos/${encodeURIComponent(photoId)}`), {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!response.ok) return null;
+  return URL.createObjectURL(await response.blob());
 }
 
 export async function deleteOdometerPhoto(photoId: string): Promise<void> {

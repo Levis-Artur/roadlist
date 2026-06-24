@@ -42,9 +42,11 @@ function localRouteSheets(filters: RouteSheetFilters = {}): RouteSheet[] {
   const query = filters.search?.trim().toLocaleLowerCase('uk-UA');
   return routeSheetStorage.getAll().filter((item) => {
     const matchesStatus = !filters.status || item.status === filters.status;
+    const matchesDepartment = !filters.department || item.department.toLocaleLowerCase('uk-UA').includes(filters.department.toLocaleLowerCase('uk-UA'));
+    const matchesUnit = !filters.unit || (item.unit ?? '').toLocaleLowerCase('uk-UA').includes(filters.unit.toLocaleLowerCase('uk-UA'));
     const matchesQuery = !query || [item.fullName, item.badgeNumber, item.vehicleNumber]
       .some((value) => value.toLocaleLowerCase('uk-UA').includes(query));
-    return matchesStatus && matchesQuery;
+    return matchesStatus && matchesDepartment && matchesUnit && matchesQuery;
   });
 }
 
@@ -137,6 +139,8 @@ export async function getRouteSheets(filters: RouteSheetFilters = {}): Promise<R
   const params = new URLSearchParams();
   if (filters.status) params.set('status', filters.status);
   if (filters.search) params.set('search', filters.search);
+  if (filters.department) params.set('department', filters.department);
+  if (filters.unit) params.set('unit', filters.unit);
   try {
     const query = params.size ? `?${params.toString()}` : '';
     return extractList<RouteSheet>(await apiGet<unknown>(`/api/route-sheets${query}`), 'routeSheets').map(normalizeRouteSheet);

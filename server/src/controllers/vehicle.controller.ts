@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { createVehicle, deactivateVehicle, listAvailableVehicles, listVehicles, updateVehicle } from '../services/vehicle.service.js';
+import { createVehicle, deactivateVehicle, listAvailableVehicles, listVehicleTransferHistory, listVehicles, transferVehicle, updateVehicle } from '../services/vehicle.service.js';
 
 function metadata(request: Request) {
   return {
@@ -9,6 +9,7 @@ function metadata(request: Request) {
     actorUsername: request.admin?.username,
     actorRole: request.admin?.role,
     actorDepartment: request.admin?.department ?? null,
+    actorUnit: request.admin?.unit ?? null,
   };
 }
 
@@ -26,6 +27,14 @@ export async function createVehicleController(request: Request, response: Respon
 
 export async function updateVehicleController(request: Request, response: Response, next: NextFunction) {
   try { response.json({ success: true, vehicle: await updateVehicle(request.params.id, request.body ?? {}, metadata(request), request.admin) }); } catch (error) { next(error); }
+}
+
+export async function transferVehicleController(request: Request, response: Response, next: NextFunction) {
+  try { response.json({ success: true, vehicle: await transferVehicle(request.params.id, request.body ?? {}, metadata(request), request.admin) }); } catch (error) { next(error); }
+}
+
+export async function listVehicleTransferHistoryController(request: Request, response: Response, next: NextFunction) {
+  try { response.json({ success: true, transferHistory: await listVehicleTransferHistory(request.params.id, request.admin) }); } catch (error) { next(error); }
 }
 
 export async function deactivateVehicleController(request: Request, response: Response, next: NextFunction) {

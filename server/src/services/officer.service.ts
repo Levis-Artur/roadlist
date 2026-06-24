@@ -10,6 +10,7 @@ import { validateBadgeNumber } from '../utils/badgeNumber.js';
 
 const PIN_PATTERN = /^\d{4,8}$/;
 const PIN_ERROR = 'PIN має містити від 4 до 8 цифр.';
+const FOREIGN_DEPARTMENT_MESSAGE = 'Недостатньо прав для доступу до даних іншого управління';
 
 function validatePin(value: unknown): string {
   const pin = typeof value === 'string' ? value : '';
@@ -27,6 +28,10 @@ function required(value: unknown, message: string): string {
   return value.trim();
 }
 
+function optionalText(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
 function uniqueOfficerError(error: unknown): never {
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
     throw new AppError('Патрульний з таким номером жетона вже існує', 409);
@@ -38,7 +43,7 @@ export async function verifyOfficer(badgeNumber: string, metadata: RequestMetada
   const normalizedBadge = validateBadgeNumber(badgeNumber);
   const officer = await prisma.officer.findFirst({
     where: { badgeNumber: normalizedBadge, isActive: true },
-    select: { badgeNumber: true, fullName: true, department: true },
+    select: { badgeNumber: true, fullName: true, department: true, unit: true },
   });
   await createAuditLog({
     action: officer ? 'Перевірка жетона успішна' : 'Жетон не знайдено', entityType: 'officer',
@@ -50,11 +55,13 @@ export async function verifyOfficer(badgeNumber: string, metadata: RequestMetada
 export async function listOfficers(filters: Record<string, unknown>) {
   const search = typeof filters.search === 'string' ? filters.search.trim() : '';
   const department = typeof filters.department === 'string' ? filters.department.trim() : '';
+  const unit = typeof filters.unit === 'string' ? filters.unit.trim() : '';
   const isActive = filters.isActive === 'true' ? true : filters.isActive === 'false' ? false : undefined;
   const officers = await prisma.officer.findMany({
     where: {
       isActive,
       department: department ? { contains: department, mode: 'insensitive' } : undefined,
+      unit: unit ? { contains: unit, mode: 'insensitive' } : undefined,
       OR: search ? [
         { badgeNumber: { contains: search } },
         { fullName: { contains: search, mode: 'insensitive' } },
@@ -71,7 +78,7 @@ function scopedDepartment(actor?: AdminTokenPayload, requestedDepartment?: strin
 
 function assertDepartmentAccess(actor: AdminTokenPayload | undefined, department: string) {
   if (actor?.role === 'REGIONAL_ADMIN' && department !== actor.department) {
-    throw new AppError('Недостатньо прав для доступу до чужого УПП.', 403);
+    throw new AppError(FOREIGN_DEPARTMENT_MESSAGE, 403);
   }
 }
 
@@ -82,13 +89,20 @@ export async function listOfficersScoped(filters: Record<string, unknown>, actor
 export async function createOfficer(input: Record<string, unknown>, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const badgeNumber = validateBadgeNumber(input.badgeNumber);
   const fullName = required(input.fullName, 'ПІБ обов’язкове.');
-  const department = required(input.department, 'УПП обов’язкове.');
+  const department = actor?.role === 'REGIONAL_ADMIN'
+    ? actor.department ?? ''
+    : required(input.department, 'УПП обов’язкове.');
+  if (!department) throw new AppError('УПП обов’язкове.', 400);
+  if (actor?.role === 'REGIONAL_ADMIN' && typeof input.department === 'string' && input.department.trim() && input.department.trim() !== department) {
+    throw new AppError('Регіональний адміністратор може створювати користувачів тільки у своєму управлінні.', 403);
+  }
   assertDepartmentAccess(actor, department);
+  const unit = optionalText(input.unit);
   const pin = validatePin(input.pin);
   const pinHash = await bcrypt.hash(pin, 10);
   const isActive = input.isActive !== false;
   try {
-    const officer = await prisma.officer.create({ data: { badgeNumber, fullName, department, pinHash, isActive } });
+    const officer = await prisma.officer.create({ data: { badgeNumber, fullName, department, unit, pinHash, isActive } });
     await createAuditLog({ action: 'Створено патрульного', entityType: 'officer', entityId: officer.id, badgeNumber, details: fullName, ...metadata });
     await createAuditLog({ action: 'Адміністратор встановив PIN', entityType: 'officer', entityId: officer.id, badgeNumber, details: fullName, ...metadata });
     return publicOfficer(officer);
@@ -101,13 +115,16 @@ export async function updateOfficer(id: string, input: Record<string, unknown>, 
   assertDepartmentAccess(actor, current.department);
   const badgeNumber = input.badgeNumber === undefined ? current.badgeNumber : validateBadgeNumber(input.badgeNumber);
   const fullName = input.fullName === undefined ? current.fullName : required(input.fullName, 'ПІБ обов’язкове.');
-  const department = input.department === undefined ? current.department : required(input.department, 'УПП обов’язкове.');
+  const department = actor?.role === 'REGIONAL_ADMIN'
+    ? current.department
+    : input.department === undefined ? current.department : required(input.department, 'УПП обов’язкове.');
   assertDepartmentAccess(actor, department);
+  const unit = input.unit === undefined ? undefined : optionalText(input.unit);
   const pinHash = input.pin === undefined || input.pin === '' ? undefined : await bcrypt.hash(validatePin(input.pin), 10);
   try {
     const officer = await prisma.officer.update({
       where: { id },
-      data: { badgeNumber, fullName, department, pinHash, isActive: input.isActive === undefined ? undefined : Boolean(input.isActive) },
+      data: { badgeNumber, fullName, department, unit, pinHash, isActive: input.isActive === undefined ? undefined : Boolean(input.isActive) },
     });
     await createAuditLog({ action: 'Оновлено патрульного', entityType: 'officer', entityId: id, badgeNumber, details: fullName, ...metadata });
     if (pinHash) await createAuditLog({ action: 'Адміністратор змінив PIN', entityType: 'officer', entityId: id, badgeNumber, details: fullName, ...metadata });
@@ -152,7 +169,7 @@ export async function loginOfficer(badgeValue: unknown, pinValue: unknown, metad
     await createAuditLog({ action: 'Невдала спроба входу патрульного', entityType: 'officer', entityId: officer.id, badgeNumber, details: 'Невірні облікові дані', ...metadata });
     throw new AppError('Невірний номер жетона або PIN', 401);
   }
-  const safeOfficer = { badgeNumber: officer.badgeNumber, fullName: officer.fullName, department: officer.department };
+  const safeOfficer = { badgeNumber: officer.badgeNumber, fullName: officer.fullName, department: officer.department, unit: officer.unit };
   const token = jwt.sign(safeOfficer, env.jwtSecret, { expiresIn: env.officerJwtExpiresIn as SignOptions['expiresIn'], subject: officer.id });
   await createAuditLog({ action: 'Вхід патрульного успішний', entityType: 'officer', entityId: officer.id, badgeNumber, details: officer.fullName, ...metadata });
   return { token, officer: safeOfficer };

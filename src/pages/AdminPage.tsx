@@ -64,14 +64,14 @@ function csvCell(value: string | number | boolean | undefined): string {
 
 function exportCsv(routeSheets: RouteSheet[]) {
   const headers = [
-    'Дата', 'ПІБ', 'Номер жетона', 'УПП', 'Номер екіпажу / підрозділу',
+    'Дата', 'ПІБ', 'Номер жетона', 'УПП', 'Підрозділ', 'Номер екіпажу / підрозділу',
     'Номер автомобіля', 'Початковий кілометраж', 'Кінцевий кілометраж', 'Пробіг',
     'Статус', 'Ручне внесення початку', 'Ручне внесення кінця', 'Час початку', 'Час завершення',
     'Дата перевірки адміністратором', 'Перевірив', 'Коментар адміністратора',
   ];
   const rows = routeSheets.map((item) => [
     formatDate(item.createdAt, true), item.fullName, item.badgeNumber, item.department,
-    item.crewNumber || '—', item.vehicleNumber, item.startOdometer, item.endOdometer, item.distanceKm,
+    item.unit || '—', item.crewNumber || '—', item.vehicleNumber, item.startOdometer, item.endOdometer, item.distanceKm,
     statusLabels[item.status], item.startManualEntry ? 'Так' : 'Ні',
     item.endManualEntry === undefined ? '' : item.endManualEntry ? 'Так' : 'Ні',
     formatDate(item.startedAt), item.endedAt ? formatDate(item.endedAt) : '',
@@ -99,15 +99,22 @@ function StoredPhoto({ photoId, alt }: { photoId?: string; alt: string }) {
 
   useEffect(() => {
     let active = true;
+    let objectUrl: string | null = null;
     setPhoto(undefined);
     if (!photoId) {
       setPhoto(null);
       return () => { active = false; };
     }
     void getOdometerPhoto(photoId)
-      .then((dataUrl) => { if (active) setPhoto(dataUrl); })
+      .then((dataUrl) => {
+        if (dataUrl?.startsWith('blob:')) objectUrl = dataUrl;
+        if (active) setPhoto(dataUrl);
+      })
       .catch(() => { if (active) setPhoto(null); });
-    return () => { active = false; };
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
   }, [photoId]);
 
   if (photo === undefined) return <div className="no-photo">Завантаження фото…</div>;
@@ -133,6 +140,8 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
   const [reviewSuccess, setReviewSuccess] = useState('');
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | RouteSheetStatus>('all');
+  const [departmentFilter, setDepartmentFilter] = useState('');
+  const [unitFilter, setUnitFilter] = useState('');
   const [adminError, setAdminError] = useState('');
   const [loading, setLoading] = useState(true);
   const [officers, setOfficers] = useState<Officer[]>([]);
@@ -175,13 +184,24 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
 
   const filteredRouteSheets = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('uk-UA');
+    const normalizedDepartment = departmentFilter.trim().toLocaleLowerCase('uk-UA');
+    const normalizedUnit = unitFilter.trim().toLocaleLowerCase('uk-UA');
     return routeSheets.filter((item) => {
       const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
+      const matchesDepartment = !normalizedDepartment || item.department.toLocaleLowerCase('uk-UA').includes(normalizedDepartment);
+      const matchesUnit = !normalizedUnit || (item.unit || '').toLocaleLowerCase('uk-UA').includes(normalizedUnit);
       const matchesQuery = !normalizedQuery || [item.fullName, item.badgeNumber, item.vehicleNumber]
         .some((value) => value.toLocaleLowerCase('uk-UA').includes(normalizedQuery));
-      return matchesStatus && matchesQuery;
+      return matchesStatus && matchesDepartment && matchesUnit && matchesQuery;
     });
-  }, [query, routeSheets, statusFilter]);
+  }, [departmentFilter, query, routeSheets, statusFilter, unitFilter]);
+
+  const filteredMonthlyRouteSheets = useMemo(() => {
+    const normalizedDepartment = departmentFilter.trim().toLocaleLowerCase('uk-UA');
+    const normalizedUnit = unitFilter.trim().toLocaleLowerCase('uk-UA');
+    return monthlyRouteSheets.filter((item) => (!normalizedDepartment || item.department.toLocaleLowerCase('uk-UA').includes(normalizedDepartment))
+      && (!normalizedUnit || (item.unit || '').toLocaleLowerCase('uk-UA').includes(normalizedUnit)));
+  }, [departmentFilter, monthlyRouteSheets, unitFilter]);
 
   const stats = useMemo(() => ({
     total: routeSheets.length,
@@ -384,8 +404,8 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
 
       {adminError && <p className="message error" role="alert">{adminError}</p>}
 
-      {section === 'officers' && <OfficerDirectory />}
-      {section === 'vehicles' && <VehicleDirectory />}
+      {section === 'officers' && <OfficerDirectory currentAdmin={admin} />}
+      {section === 'vehicles' && <VehicleDirectory currentAdmin={admin} />}
       {section === 'admins' && canManageAdmins && <AdminUsersDirectory currentAdmin={admin} />}
       {section === 'profile' && (
         <section className="panel">
@@ -395,6 +415,7 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
             <DetailItem label="Логін" value={myProfile.username} />
             <DetailItem label="Роль" value={adminRoleLabels[myProfile.role]} />
             <DetailItem label="УПП" value={myProfile.department || '—'} />
+            <DetailItem label="Підрозділ" value={myProfile.unit || '—'} />
             <DetailItem label="Останній вхід" value={formatDate(myProfile.lastLoginAt ?? undefined)} />
             <DetailItem label="Дата зміни пароля" value={formatDate(myProfile.passwordChangedAt ?? undefined)} />
             <DetailItem label="Двофакторна автентифікація" value={myProfile.twoFactorEnabled ? 'Увімкнена' : 'Не увімкнена'} />
@@ -424,16 +445,22 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
         <article><span>Активні автомобілі</span><strong>{stats.activeVehicles}</strong></article>
       </section>
 
-      <section className="admin-filters" aria-label="Фільтри маршрутних листів" hidden={section !== 'route_sheets'}>
-        <label>Пошук
+      <section className="admin-filters" aria-label="Фільтри маршрутних листів" hidden={section !== 'route_sheets' && section !== 'monthly_route_sheets'}>
+        {section === 'route_sheets' && <label>Пошук
           <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ПІБ, жетон або номер авто" />
+        </label>}
+        {admin.role !== 'REGIONAL_ADMIN' && <label>УПП
+          <input value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)} placeholder="Фільтр за УПП" />
+        </label>}
+        <label>Підрозділ
+          <input value={unitFilter} onChange={(event) => setUnitFilter(event.target.value)} placeholder="Фільтр за підрозділом" />
         </label>
-        <label>Статус
+        {section === 'route_sheets' && <label>Статус
           <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | RouteSheetStatus)}>
             <option value="all">Всі</option><option value="active">Активні</option>
             <option value="completed">Завершені</option><option value="needs_review">Потребують перевірки</option><option value="verified">Перевірено</option>
           </select>
-        </label>
+        </label>}
       </section>
 
       {section === 'route_sheets' && (loading ? (
@@ -447,7 +474,7 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
           <div className="table-scroll">
             <table>
               <thead><tr>
-                <th>Дата</th><th>ПІБ</th><th>Номер жетона</th><th>УПП</th>
+                <th>Дата</th><th>ПІБ</th><th>Номер жетона</th><th>УПП</th><th>Підрозділ</th>
                 <th>Екіпаж / підрозділ</th><th>Автомобіль</th><th>Початковий км</th><th>Кінцевий км</th>
                 <th>Пробіг</th><th>Заправка</th><th>Літри</th><th>Статус</th><th>Ручне внесення</th><th>Потребує перевірки</th>
                 <th>Час початку</th><th>Час завершення</th><th>Деталі</th>
@@ -455,7 +482,7 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
               <tbody>{filteredRouteSheets.map((item) => (
                 <tr key={item.id}>
                   <td>{formatDate(item.createdAt, true)}</td><td>{item.fullName}</td><td>{item.badgeNumber}</td>
-                  <td>{item.department}</td><td>{item.crewNumber || '—'}</td><td>{displayVehicle(item.vehicleNumber)}</td><td>{item.startOdometer}</td>
+                  <td>{item.department}</td><td>{item.unit || '—'}</td><td>{item.crewNumber || '—'}</td><td>{displayVehicle(item.vehicleNumber)}</td><td>{item.startOdometer}</td>
                   <td>{item.endOdometer ?? '—'}</td><td>{item.distanceKm ?? '—'}</td><td>{item.refueled ? 'Так' : 'Ні'}</td><td>{item.refueled ? item.fuelLiters ?? '—' : '—'}</td>
                   <td><span className={`status ${item.status}`}>{statusLabels[item.status]}</span></td>
                   <td><span className={`meta-badge ${item.startManualEntry || item.endManualEntry ? 'manual' : ''}`}>{item.startManualEntry || item.endManualEntry ? 'Так' : 'Ні'}</span></td><td>{item.status === 'needs_review' ? 'Так' : 'Ні'}</td>
@@ -472,20 +499,23 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
         <section className="empty-state"><h2>Завантажуємо місячні маршрутні листи...</h2></section>
       ) : !monthlyRouteSheets.length ? (
         <section className="empty-state"><h2>Місячних маршрутних листів ще немає</h2><p>Перший лист створиться автоматично під час початку зміни на автомобілі.</p></section>
+      ) : !filteredMonthlyRouteSheets.length ? (
+        <section className="empty-state"><h2>Записів не знайдено</h2><p>Змініть фільтр управління або підрозділу.</p></section>
       ) : (
         <section className="table-card">
           <div className="table-scroll">
             <table>
               <thead><tr>
-                <th>Автомобіль</th><th>Номерний знак</th><th>УПП</th><th>Місяць</th><th>Рік</th>
+                <th>Автомобіль</th><th>Номерний знак</th><th>УПП</th><th>Підрозділ</th><th>Місяць</th><th>Рік</th>
                 <th>Статус</th><th>Початковий км</th><th>Кінцевий км</th><th>Загальний пробіг</th>
                 <th>Загальна заправка, л</th><th>Кількість змін</th><th>Дії</th>
               </tr></thead>
-              <tbody>{monthlyRouteSheets.map((item) => (
+              <tbody>{filteredMonthlyRouteSheets.map((item) => (
                 <tr key={item.id}>
                   <td>{item.vehicleBrand} {item.vehicleModel}</td>
                   <td>{item.displayVehicleNumber || item.vehicleNumber}</td>
                   <td>{item.department}</td>
+                  <td>{item.unit || '—'}</td>
                   <td>{monthNames[item.month - 1] ?? item.month}</td>
                   <td>{item.year}</td>
                   <td><span className={`status ${item.status}`}>{monthlyStatusLabels[item.status] ?? item.status}</span></td>
@@ -535,6 +565,7 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
             <dl className="detail-grid">
               <DetailItem label="ID запису" value={selected.id} /><DetailItem label="ПІБ" value={selected.fullName} />
               <DetailItem label="Номер жетона" value={selected.badgeNumber} /><DetailItem label="УПП" value={selected.department} />
+              <DetailItem label="Підрозділ" value={selected.unit || '—'} />
               <DetailItem label="Екіпаж / підрозділ" value={selected.crewNumber || '—'} />
               <DetailItem label="Автомобіль" value={displayVehicle(selected.vehicleNumber)} /><DetailItem label="Початок зміни" value={formatDate(selected.startedAt)} />
               <DetailItem label="Завершення зміни" value={formatDate(selected.endedAt)} /><DetailItem label="Початковий кілометраж" value={`${selected.startOdometer} км`} />
@@ -617,6 +648,7 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
               <DetailItem label="Автомобіль" value={`${selectedMonthly.vehicleBrand} ${selectedMonthly.vehicleModel}`} />
               <DetailItem label="Номерний знак" value={selectedMonthly.displayVehicleNumber || selectedMonthly.vehicleNumber} />
               <DetailItem label="УПП" value={selectedMonthly.department} />
+              <DetailItem label="Підрозділ" value={selectedMonthly.unit || '—'} />
               <DetailItem label="Місяць/рік" value={`${monthNames[selectedMonthly.month - 1] ?? selectedMonthly.month} ${selectedMonthly.year}`} />
               <DetailItem label="Початковий кілометраж" value={selectedMonthly.openingOdometer === null || selectedMonthly.openingOdometer === undefined ? '—' : `${selectedMonthly.openingOdometer} км`} />
               <DetailItem label="Кінцевий кілометраж" value={selectedMonthly.closingOdometer === null || selectedMonthly.closingOdometer === undefined ? '—' : `${selectedMonthly.closingOdometer} км`} />
@@ -674,6 +706,7 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
                 <div><strong>Модель</strong><span>{printMonthly.vehicleModel}</span></div>
                 <div><strong>Номерний знак</strong><span>{printMonthly.displayVehicleNumber || printMonthly.vehicleNumber}</span></div>
                 <div><strong>УПП</strong><span>{printMonthly.department}</span></div>
+                <div><strong>Підрозділ</strong><span>{printMonthly.unit || '—'}</span></div>
                 <div><strong>Місяць</strong><span>{monthNames[printMonthly.month - 1] ?? printMonthly.month}</span></div>
                 <div><strong>Рік</strong><span>{printMonthly.year}</span></div>
               </section>

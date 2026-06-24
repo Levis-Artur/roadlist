@@ -10,6 +10,7 @@ export interface MonthlyRouteSheetFilters {
   vehicleId?: string;
   status?: string;
   department?: string;
+  unit?: string;
 }
 
 function monthlyWhere(filters: MonthlyRouteSheetFilters, actor?: AdminTokenPayload): Prisma.VehicleMonthlyRouteSheetWhereInput {
@@ -20,12 +21,13 @@ function monthlyWhere(filters: MonthlyRouteSheetFilters, actor?: AdminTokenPaylo
   if (filters.status) where.status = filters.status;
   if (actor?.role === 'REGIONAL_ADMIN') where.department = actor.department ?? '';
   else if (filters.department) where.department = { contains: filters.department, mode: 'insensitive' };
+  if (filters.unit) where.unit = { contains: filters.unit, mode: 'insensitive' };
   return where;
 }
 
 function assertDepartmentAccess(actor: AdminTokenPayload | undefined, department: string) {
   if (actor?.role === 'REGIONAL_ADMIN' && department !== actor.department) {
-    throw new AppError('Недостатньо прав для доступу до чужого УПП.', 403);
+    throw new AppError('Недостатньо прав для доступу до даних іншого управління', 403);
   }
 }
 

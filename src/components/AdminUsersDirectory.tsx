@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { DEPARTMENTS } from '../constants/departments';
 import type { AdminRole, AdminUser } from '../types';
 import { adminRoleLabels, createAdminUser, deactivateAdminUser, getAdminUsers, resetAdminPassword, resetAdminTwoFactor, updateAdminUser } from '../services/adminService';
 
-const emptyForm = { username: '', fullName: '', role: 'REGIONAL_ADMIN' as AdminRole, department: '', password: '', isActive: true };
+const emptyForm = { username: '', fullName: '', role: 'REGIONAL_ADMIN' as AdminRole, department: '', unit: '', password: '', isActive: true };
 
 function formatDate(value?: string | null) {
   return value ? new Date(value).toLocaleString('uk-UA') : '—';
@@ -33,7 +34,7 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
   function showForm(item?: AdminUser) {
     setEditing(item ?? null);
     setForm(item
-      ? { username: item.username, fullName: item.fullName, role: item.role, department: item.department ?? '', password: '', isActive: item.isActive }
+      ? { username: item.username, fullName: item.fullName, role: item.role, department: item.department ?? '', unit: item.unit ?? '', password: '', isActive: item.isActive }
       : { ...emptyForm, role: availableRoles[0] });
     setOpen(true);
     setError('');
@@ -56,6 +57,7 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
         fullName: form.fullName.trim(),
         role: form.role,
         department: form.role === 'REGIONAL_ADMIN' ? form.department.trim() : null,
+        unit: form.role === 'REGIONAL_ADMIN' ? form.unit.trim() || null : null,
         password: form.password.trim() || undefined,
         isActive: form.isActive,
       };
@@ -103,12 +105,12 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
       {error && <p className="message error" role="alert">{error}</p>}
       {success && <p className="message success" role="status">{success}</p>}
       <div className="table-card"><div className="table-scroll"><table>
-        <thead><tr><th>Логін</th><th>ПІБ</th><th>Роль</th><th>УПП</th><th>Активний</th><th>2FA</th><th>Останній вхід</th><th>Зміна пароля</th><th>Тимчасовий пароль</th><th>Заблоковано до</th><th>Дії</th></tr></thead>
+        <thead><tr><th>Логін</th><th>ПІБ</th><th>Роль</th><th>УПП</th><th>Підрозділ</th><th>Активний</th><th>2FA</th><th>Останній вхід</th><th>Зміна пароля</th><th>Тимчасовий пароль</th><th>Заблоковано до</th><th>Дії</th></tr></thead>
         <tbody>{items.map((item) => {
           const protectedOwner = item.role === 'SYSTEM_OWNER';
           return (
             <tr key={item.id}>
-              <td>{item.username}</td><td>{item.fullName}</td><td>{adminRoleLabels[item.role]}</td><td>{item.department || '—'}</td>
+              <td>{item.username}</td><td>{item.fullName}</td><td>{adminRoleLabels[item.role]}</td><td>{item.department || '—'}</td><td>{item.unit || '—'}</td>
               <td><span className={`status ${item.isActive ? 'completed' : 'needs_review'}`}>{item.isActive ? 'Так' : 'Ні'}</span></td>
               <td>{item.twoFactorEnabled ? <span className="meta-badge">Увімкнена</span> : <span className="meta-badge warning">Не увімкнена</span>}</td>
               <td>{formatDate(item.lastLoginAt)}</td>
@@ -127,11 +129,13 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
       </table></div></div>
       {open && <div className="modal-backdrop" onMouseDown={() => setOpen(false)}><form className="modal directory-modal" onSubmit={save} onMouseDown={(e) => e.stopPropagation()}>
         <div className="section-heading"><h2>{editing ? 'Редагування адміністратора' : 'Новий адміністратор'}</h2><button type="button" className="text-button" onClick={() => setOpen(false)}>Закрити</button></div>
+        <datalist id="admin-department-options">{DEPARTMENTS.map((item) => <option key={item} value={item} />)}</datalist>
         <div className="form-grid">
           <label>Логін<input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} required /></label>
           <label>ПІБ<input value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required /></label>
           <label>Роль<select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as AdminRole })}>{availableRoles.map((role) => <option key={role} value={role}>{adminRoleLabels[role]}</option>)}</select></label>
-          {form.role === 'REGIONAL_ADMIN' && <label>УПП<input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} required /></label>}
+          {form.role === 'REGIONAL_ADMIN' && <label>УПП<input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} list="admin-department-options" required /></label>}
+          {form.role === 'REGIONAL_ADMIN' && <label>Підрозділ<input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="Необов’язково" /></label>}
           <label>{editing ? 'Новий тимчасовий пароль' : 'Тимчасовий пароль'}<input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required={!editing} /><small>Це тимчасовий пароль. Після першого входу адміністратор повинен змінити його.</small></label>
           <label className="checkbox-filter"><input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />Активний</label>
         </div>

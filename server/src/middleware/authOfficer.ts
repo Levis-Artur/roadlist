@@ -6,6 +6,7 @@ interface OfficerTokenPayload extends jwt.JwtPayload {
   badgeNumber: string;
   fullName: string;
   department: string;
+  unit?: string | null;
 }
 
 export function authOfficer(request: Request, response: Response, next: NextFunction) {
@@ -19,6 +20,7 @@ export function authOfficer(request: Request, response: Response, next: NextFunc
       badgeNumber: payload.badgeNumber,
       fullName: payload.fullName,
       department: payload.department,
+      unit: payload.unit ?? null,
     };
     next();
   } catch {
