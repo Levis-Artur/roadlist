@@ -217,44 +217,77 @@ export function DepartmentDirectory({ currentAdmin }: { currentAdmin: AdminUser 
       <div className="modal-actions"><button type="submit">Зберегти</button><button type="button" className="secondary" onClick={() => setOpen(false)}>Скасувати</button></div>
     </form></div>}
 
-    {selected && details && <div className="modal-backdrop" onMouseDown={() => setSelected(null)}><section className="modal detail-modal" onMouseDown={(event) => event.stopPropagation()}>
-      <div className="section-heading"><div><span className="eyebrow">Управління</span><h2>{selected.name}</h2></div><button type="button" className="text-button" onClick={() => setSelected(null)}>Закрити</button></div>
-      <dl className="detail-grid">
-        <div><dt>ID</dt><dd>{selected.id}</dd></div><div><dt>Код</dt><dd>{selected.code || '—'}</dd></div>
-        <div><dt>Регіон</dt><dd>{selected.region || '—'}</dd></div><div><dt>Статус</dt><dd>{selected.isActive ? 'Активне' : 'Неактивне'}</dd></div>
-        <div><dt>Внутрішні підрозділи</dt><dd>{details.stats.units}</dd></div><div><dt>Автомобілі</dt><dd>{details.stats.vehicles}</dd></div>
-        <div><dt>Поліцейські</dt><dd>{details.stats.officers}</dd></div><div><dt>Активні зміни</dt><dd>{details.stats.activeShifts}</dd></div>
-        <div><dt>Завершені зміни</dt><dd>{details.stats.completedShifts}</dd></div><div><dt>Сумарний пробіг</dt><dd>{details.stats.distance} км</dd></div>
-      </dl>
+    {selected && details && <div className="modal-backdrop" onMouseDown={() => setSelected(null)}><section className="modal detail-modal department-detail-modal" onMouseDown={(event) => event.stopPropagation()}>
+      <div className="section-heading modal-header"><div className="text-wrap"><span className="eyebrow">Управління</span><h2>{selected.name}</h2></div><button type="button" className="text-button" onClick={() => setSelected(null)}>Закрити</button></div>
+      <div className="modal-body">
+        <section className="modal-section">
+          <div className="modal-section-header"><h3>Загальна інформація</h3></div>
+          <div className="info-grid">
+            <div className="info-item"><span className="info-label">ID</span><span className="info-value mono">{selected.id}</span></div>
+            <div className="info-item"><span className="info-label">Код</span><span className="info-value">{selected.code || '—'}</span></div>
+            <div className="info-item"><span className="info-label">Регіон</span><span className="info-value">{selected.region || '—'}</span></div>
+            <div className="info-item"><span className="info-label">Статус</span><span className="info-value">{selected.isActive ? 'Активне' : 'Неактивне'}</span></div>
+            <div className="info-item"><span className="info-label">Підрозділи</span><span className="info-value">{details.stats.units}</span></div>
+            <div className="info-item"><span className="info-label">Автомобілі</span><span className="info-value">{details.stats.vehicles}</span></div>
+            <div className="info-item"><span className="info-label">Поліцейські</span><span className="info-value">{details.stats.officers}</span></div>
+            <div className="info-item"><span className="info-label">Активні зміни</span><span className="info-value">{details.stats.activeShifts}</span></div>
+            <div className="info-item"><span className="info-label">Завершені зміни</span><span className="info-value">{details.stats.completedShifts}</span></div>
+            <div className="info-item"><span className="info-label">Пробіг</span><span className="info-value">{details.stats.distance} км</span></div>
+          </div>
+        </section>
 
-      <div className="section-heading inline-heading"><div><span className="eyebrow">Деталі управління</span><h3>Внутрішні підрозділи</h3></div>{canEdit && <button type="button" className="small-button" onClick={() => showUnitForm()}>Додати підрозділ</button>}</div>
-      <div className="table-scroll nested-table"><table>
-        <thead><tr><th>Назва</th><th>Тип</th><th>Код</th><th>Активний</th><th>Автомобілі</th><th>Поліцейські</th><th>Маршрутні листи</th><th>Дії</th></tr></thead>
-        <tbody>{details.units.map((unit) => <tr key={unit.id}>
-          <td>{unit.name}</td><td>{unit.type || '—'}</td><td>{unit.code || '—'}</td><td>{unit.isActive ? 'Так' : 'Ні'}</td>
-          <td>{details.vehicles.filter((item) => inUnit(item, unit)).length}</td>
-          <td>{details.officers.filter((item) => inUnit(item, unit)).length}</td>
-          <td>{details.routeSheets.filter((item) => inUnit(item, unit)).length}</td>
-          <td className="row-actions">
-            <button className="small-button" onClick={() => showUnitForm(unit)}>Переглянути</button>
-            {canEdit && <button className="small-button" onClick={() => showUnitForm(unit)}>Редагувати</button>}
-            {canEdit && unit.isActive && <button className="small-button danger-mini" onClick={() => void deactivateUnit(unit)}>Деактивувати</button>}
-            {canDelete && <button className="small-button danger-outline" onClick={() => setDeleteTarget({ type: 'unit', id: unit.id, label: unit.name })}>Видалити</button>}
-          </td>
-        </tr>)}</tbody>
-      </table></div>
+        <section className="modal-section">
+          <div className="modal-section-header"><div><span className="eyebrow">Деталі управління</span><h3>Внутрішні підрозділи</h3></div>{canEdit && <button type="button" className="small-button" onClick={() => showUnitForm()}>Додати підрозділ</button>}</div>
+          {!details.units.length ? <div className="empty-state compact-empty">Внутрішніх підрозділів ще немає.</div> : <div className="table-scroll nested-table"><table>
+            <thead><tr><th>Назва</th><th>Тип</th><th>Код</th><th>Активний</th><th>Автомобілі</th><th>Поліцейські</th><th>Маршрутні листи</th><th>Дії</th></tr></thead>
+            <tbody>{details.units.map((unit) => <tr key={unit.id}>
+              <td>{unit.name}</td><td>{unit.type || '—'}</td><td>{unit.code || '—'}</td><td>{unit.isActive ? 'Так' : 'Ні'}</td>
+              <td>{details.vehicles.filter((item) => inUnit(item, unit)).length}</td>
+              <td>{details.officers.filter((item) => inUnit(item, unit)).length}</td>
+              <td>{details.routeSheets.filter((item) => inUnit(item, unit)).length}</td>
+              <td><div className="table-actions">
+                <button className="small-button" onClick={() => showUnitForm(unit)}>Переглянути</button>
+                {canEdit && <button className="small-button" onClick={() => showUnitForm(unit)}>Редагувати</button>}
+                {canEdit && unit.isActive && <button className="small-button danger-mini" onClick={() => void deactivateUnit(unit)}>Деактивувати</button>}
+                {canDelete && <button className="small-button danger-outline" onClick={() => setDeleteTarget({ type: 'unit', id: unit.id, label: unit.name })}>Видалити</button>}
+              </div></td>
+            </tr>)}</tbody>
+          </table></div>}
+        </section>
 
-      <div className="section-heading inline-heading"><h3>Автомобілі</h3></div>
-      <div className="compact-list">{details.vehicles.length ? details.vehicles.map((item) => <span key={item.id} className="meta-badge">{item.brand} {item.model} — {item.displayPlateNumber || item.plateNumber}</span>) : <span className="field-hint">Немає автомобілів.</span>}</div>
-      <div className="section-heading inline-heading"><h3>Поліцейські</h3></div>
-      <div className="compact-list">{details.officers.length ? details.officers.map((item) => <span key={item.id ?? item.badgeNumber} className="meta-badge">{item.fullName} · {item.badgeNumber}</span>) : <span className="field-hint">Немає поліцейських.</span>}</div>
-      <div className="section-heading inline-heading"><h3>Маршрутні листи</h3></div>
-      <p className="field-hint">Змін: {details.routeSheets.length}; місячних листів: {details.monthlySheets.length}; сумарний пробіг: {details.stats.distance} км.</p>
-      <div className="section-heading inline-heading"><h3>Журнал дій управління</h3></div>
-      <div className="table-scroll nested-table"><table>
-        <thead><tr><th>Час</th><th>Дія</th><th>Сутність</th><th>Деталі</th></tr></thead>
-        <tbody>{details.auditLogs.slice(0, 20).map((log) => <tr key={log.id}><td>{formatDate(log.createdAt)}</td><td>{log.action}</td><td>{log.entityType}</td><td>{log.details || '—'}</td></tr>)}</tbody>
-      </table></div>
+        <section className="modal-section">
+          <div className="modal-section-header"><h3>Автомобілі</h3></div>
+          {!details.vehicles.length ? <div className="empty-state compact-empty">Немає автомобілів.</div> : <div className="table-scroll nested-table"><table>
+            <thead><tr><th>Автомобіль</th><th>Номер</th><th>Підрозділ</th><th>Статус</th></tr></thead>
+            <tbody>{details.vehicles.map((item) => <tr key={item.id}><td>{item.brand} {item.model}</td><td>{item.displayPlateNumber || item.plateNumber}</td><td>{item.unit || '—'}</td><td>{item.isActive ? 'Активний' : 'Неактивний'}</td></tr>)}</tbody>
+          </table></div>}
+        </section>
+
+        <section className="modal-section">
+          <div className="modal-section-header"><h3>Поліцейські</h3></div>
+          {!details.officers.length ? <div className="empty-state compact-empty">Немає поліцейських.</div> : <div className="table-scroll nested-table"><table>
+            <thead><tr><th>ПІБ</th><th>Жетон</th><th>Підрозділ</th><th>Статус</th></tr></thead>
+            <tbody>{details.officers.map((item) => <tr key={item.id ?? item.badgeNumber}><td>{item.fullName}</td><td>{item.badgeNumber}</td><td>{item.unit || '—'}</td><td>{item.isActive === false ? 'Неактивний' : 'Активний'}</td></tr>)}</tbody>
+          </table></div>}
+        </section>
+
+        <section className="modal-section">
+          <div className="modal-section-header"><h3>Маршрутні листи</h3></div>
+          <p className="field-hint">Змін: {details.routeSheets.length}; місячних листів: {details.monthlySheets.length}; сумарний пробіг: {details.stats.distance} км.</p>
+          {!details.routeSheets.length ? <div className="empty-state compact-empty">Немає маршрутних листів.</div> : <div className="table-scroll nested-table"><table>
+            <thead><tr><th>Дата</th><th>Патрульний</th><th>Автомобіль</th><th>Пробіг</th><th>Статус</th></tr></thead>
+            <tbody>{details.routeSheets.slice(0, 20).map((item) => <tr key={item.id}><td>{formatDate(item.startedAt)}</td><td>{item.fullName}</td><td>{item.displayVehicleNumber || item.vehicleNumber}</td><td>{item.distanceKm ?? '—'}</td><td>{item.status}</td></tr>)}</tbody>
+          </table></div>}
+        </section>
+
+        <section className="modal-section">
+          <div className="modal-section-header"><h3>Журнал дій управління</h3></div>
+          {!details.auditLogs.length ? <div className="empty-state compact-empty">Журнал дій порожній.</div> : <div className="table-scroll nested-table"><table>
+            <thead><tr><th>Час</th><th>Дія</th><th>Сутність</th><th>Деталі</th></tr></thead>
+            <tbody>{details.auditLogs.slice(0, 20).map((log) => <tr key={log.id}><td>{formatDate(log.createdAt)}</td><td>{log.action}</td><td>{log.entityType}</td><td>{log.details || '—'}</td></tr>)}</tbody>
+          </table></div>}
+        </section>
+      </div>
     </section></div>}
 
     {unitOpen && selected && <div className="modal-backdrop" onMouseDown={() => setUnitOpen(false)}><form className="modal directory-modal" onSubmit={saveUnit} onMouseDown={(event) => event.stopPropagation()}>
