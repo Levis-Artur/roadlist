@@ -7,6 +7,10 @@ declare global {
         fullName: string;
         department: string;
         unit?: string | null;
+        departmentId?: string | null;
+        departmentName?: string | null;
+        departmentUnitId?: string | null;
+        departmentUnitName?: string | null;
       };
     }
   }

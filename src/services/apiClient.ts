@@ -42,6 +42,8 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
         && !path.startsWith('/api/route-sheets/active/me'))
       || path.startsWith('/api/monthly-route-sheets')
       || path.startsWith('/api/audit')
+      || path.startsWith('/api/departments')
+      || path.startsWith('/api/department-units')
       || (path.startsWith('/api/vehicles') && !path.startsWith('/api/vehicles/available'));
     const token = adminOnlyPath
       ? sessionStorage.getItem('admin_token')

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { DEPARTMENTS } from '../constants/departments';
 import { createVehicle, deactivateVehicle, getVehicleTransferHistory, getVehicles, transferVehicle, updateVehicle } from '../services/vehicleService';
-import type { AdminUser, CreateVehicleInput, Vehicle, VehicleTransferHistory } from '../types';
+import { getDepartments, getDepartmentUnits } from '../services/organizationService';
+import type { AdminUser, CreateVehicleInput, Department, DepartmentUnit, Vehicle, VehicleTransferHistory } from '../types';
 import { normalizeVehicleNumber } from '../utils/vehicleNumber';
 
 function defaultForm(currentAdmin: AdminUser): CreateVehicleInput {
@@ -11,6 +12,10 @@ function defaultForm(currentAdmin: AdminUser): CreateVehicleInput {
     model: '',
     department: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.department || '' : DEPARTMENTS[0],
     unit: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.unit || '' : '',
+    departmentId: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.departmentId || null : null,
+    departmentName: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.departmentName || currentAdmin.department || '' : DEPARTMENTS[0],
+    departmentUnitId: null,
+    departmentUnitName: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.unit || '' : '',
     isActive: true,
   };
 }
@@ -39,15 +44,21 @@ function downloadCsv(items: Vehicle[]) {
 }
 
 function formatTransfer(item: VehicleTransferHistory) {
-  const from = `${item.fromDepartment || '—'}${item.fromUnit ? ` / ${item.fromUnit}` : ''}`;
-  const to = `${item.toDepartment}${item.toUnit ? ` / ${item.toUnit}` : ''}`;
+  const fromName = item.fromDepartmentName || item.fromDepartment || '—';
+  const fromUnit = item.fromDepartmentUnitName || item.fromUnit;
+  const toName = item.toDepartmentName || item.toDepartment;
+  const toUnit = item.toDepartmentUnitName || item.toUnit;
+  const from = `${fromName}${fromUnit ? ` / ${fromUnit}` : ''}`;
+  const to = `${toName}${toUnit ? ` / ${toUnit}` : ''}`;
   return `${from} → ${to}`;
 }
 
 export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) {
   const isRegional = currentAdmin.role === 'REGIONAL_ADMIN';
-  const canTransfer = currentAdmin.role === 'SYSTEM_OWNER' || currentAdmin.role === 'NATIONAL_ADMIN';
+  const canTransfer = currentAdmin.role === 'SYSTEM_OWNER' || currentAdmin.role === 'NATIONAL_ADMIN' || currentAdmin.role === 'REGIONAL_ADMIN';
   const [items, setItems] = useState<Vehicle[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [departmentUnits, setDepartmentUnits] = useState<DepartmentUnit[]>([]);
   const [search, setSearch] = useState('');
   const [department, setDepartment] = useState('');
   const [unit, setUnit] = useState('');
@@ -58,7 +69,7 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [transferTarget, setTransferTarget] = useState<Vehicle>();
-  const [transferForm, setTransferForm] = useState<{ newDepartment: string; newUnit: string; comment: string }>({ newDepartment: DEPARTMENTS[0], newUnit: '', comment: '' });
+  const [transferForm, setTransferForm] = useState<{ newDepartmentId: string; newDepartment: string; newDepartmentUnitId: string; newUnit: string; comment: string }>({ newDepartmentId: '', newDepartment: DEPARTMENTS[0], newDepartmentUnitId: '', newUnit: '', comment: '' });
   const [historyTarget, setHistoryTarget] = useState<Vehicle>();
   const [history, setHistory] = useState<VehicleTransferHistory[]>([]);
 
@@ -66,8 +77,14 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
     setLoading(true);
     setError('');
     try {
-      const result = await getVehicles(isRegional ? { department: currentAdmin.department || '' } : {});
+      const [result, departmentItems, unitItems] = await Promise.all([
+        getVehicles(isRegional ? { departmentId: currentAdmin.departmentId || undefined, department: currentAdmin.department || '' } : {}),
+        getDepartments(),
+        getDepartmentUnits(),
+      ]);
       setItems(Array.isArray(result) ? result : []);
+      setDepartments(departmentItems);
+      setDepartmentUnits(unitItems);
     } catch (caught) {
       console.error('[VehicleDirectory] load failed', caught);
       setItems([]);
@@ -87,6 +104,31 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
       && (status === 'all' || item.isActive === (status === 'active'));
   }), [department, isRegional, items, search, status, unit]);
 
+  const formUnits = useMemo(() => departmentUnits.filter((item) => item.departmentId === form.departmentId), [departmentUnits, form.departmentId]);
+  const transferUnits = useMemo(() => departmentUnits.filter((item) => item.departmentId === transferForm.newDepartmentId), [departmentUnits, transferForm.newDepartmentId]);
+
+  function patchDepartment(departmentId: string) {
+    const selected = departments.find((item) => item.id === departmentId);
+    setForm({ ...form, departmentId, departmentName: selected?.name || '', department: selected?.name || '', departmentUnitId: null, departmentUnitName: '', unit: '' });
+  }
+
+  function patchUnit(departmentUnitId: string) {
+    const selected = departmentUnits.find((item) => item.id === departmentUnitId);
+    setForm({ ...form, departmentUnitId: departmentUnitId || null, departmentUnitName: selected?.name || '', unit: selected?.name || '' });
+  }
+
+  function blankForm(): CreateVehicleInput {
+    const departmentItem = isRegional
+      ? departments.find((item) => item.id === currentAdmin.departmentId) || departments.find((item) => item.name === currentAdmin.department)
+      : departments[0];
+    return {
+      ...defaultForm(currentAdmin),
+      departmentId: departmentItem?.id || currentAdmin.departmentId || null,
+      department: departmentItem?.name || currentAdmin.department || DEPARTMENTS[0],
+      departmentName: departmentItem?.name || currentAdmin.departmentName || currentAdmin.department || DEPARTMENTS[0],
+    };
+  }
+
   function showForm(item?: Vehicle) {
     setEditing(item);
     setError('');
@@ -96,8 +138,12 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
       model: item.model,
       department: isRegional ? currentAdmin.department || item.department : item.department,
       unit: item.unit || '',
+      departmentId: isRegional ? currentAdmin.departmentId || item.departmentId || null : item.departmentId || null,
+      departmentName: item.departmentName || item.department,
+      departmentUnitId: item.departmentUnitId || null,
+      departmentUnitName: item.departmentUnitName || item.unit || '',
       isActive: item.isActive,
-    } : defaultForm(currentAdmin));
+    } : blankForm());
     setOpen(true);
   }
 
@@ -107,7 +153,11 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
     const payload = {
       ...form,
       department: isRegional ? currentAdmin.department || '' : form.department,
+      departmentId: isRegional ? currentAdmin.departmentId || form.departmentId : form.departmentId,
+      departmentName: isRegional ? currentAdmin.departmentName || currentAdmin.department || form.department : form.departmentName || form.department,
       unit: form.unit?.trim() || null,
+      departmentUnitId: form.departmentUnitId || null,
+      departmentUnitName: form.departmentUnitName || form.unit?.trim() || null,
     };
     if (!payload.displayPlateNumber.trim() || !payload.brand.trim() || !payload.model.trim() || !payload.department.trim()) {
       setError('Заповніть номерний знак, марку, модель та УПП.');
@@ -135,7 +185,7 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
 
   function openTransfer(item: Vehicle) {
     setTransferTarget(item);
-    setTransferForm({ newDepartment: item.department, newUnit: item.unit || '', comment: '' });
+    setTransferForm({ newDepartmentId: item.departmentId || currentAdmin.departmentId || '', newDepartment: item.departmentName || item.department, newDepartmentUnitId: item.departmentUnitId || '', newUnit: item.departmentUnitName || item.unit || '', comment: '' });
     setError('');
   }
 
@@ -145,7 +195,9 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
     setError('');
     try {
       await transferVehicle(transferTarget.id, {
+        newDepartmentId: transferForm.newDepartmentId || undefined,
         newDepartment: transferForm.newDepartment,
+        newDepartmentUnitId: transferForm.newDepartmentUnitId || null,
         newUnit: transferForm.newUnit.trim() || null,
         comment: transferForm.comment.trim() || null,
       });
@@ -195,8 +247,8 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
         <label>Номерний знак для відображення<input value={form.displayPlateNumber} onChange={(event) => setForm({ ...form, displayPlateNumber: event.target.value })} placeholder="АА5200МН" required /><small>Нормалізований номер: {normalizeVehicleNumber(form.displayPlateNumber) || '—'}</small></label>
         <label>Марка<input value={form.brand} onChange={(event) => setForm({ ...form, brand: event.target.value })} required /></label>
         <label>Модель<input value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })} required /></label>
-        <label>УПП<input value={isRegional ? currentAdmin.department || '' : form.department} onChange={(event) => setForm({ ...form, department: event.target.value })} list="vehicle-department-options" readOnly={isRegional} required /></label>
-        <label>Підрозділ<input value={form.unit || ''} onChange={(event) => setForm({ ...form, unit: event.target.value })} placeholder="Необов’язково" /></label>
+        <label>Управління<select value={form.departmentId || ''} onChange={(event) => patchDepartment(event.target.value)} disabled={isRegional} required><option value="">Оберіть управління</option>{departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label>Внутрішній підрозділ<select value={form.departmentUnitId || ''} onChange={(event) => patchUnit(event.target.value)}><option value="">Без підрозділу</option>{formUnits.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label className="checkbox-filter"><input type="checkbox" checked={form.isActive} onChange={(event) => setForm({ ...form, isActive: event.target.checked })} />Активний</label>
       </div>
       {error && <p className="message error" role="alert">{error}</p>}
@@ -206,10 +258,9 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
     {transferTarget && <div className="modal-backdrop" onMouseDown={() => setTransferTarget(undefined)}><form className="modal directory-modal" onSubmit={submitTransfer} onMouseDown={(event) => event.stopPropagation()}>
       <div className="section-heading"><h2>Переміщення автомобіля</h2><button type="button" className="text-button" onClick={() => setTransferTarget(undefined)}>Закрити</button></div>
       <p className="muted">{transferTarget.brand} {transferTarget.model} — {transferTarget.displayPlateNumber ?? transferTarget.plateNumber}</p>
-      <datalist id="transfer-department-options">{DEPARTMENTS.map((item) => <option key={item} value={item} />)}</datalist>
       <div className="form-grid">
-        <label>Нове управління<input value={transferForm.newDepartment} onChange={(event) => setTransferForm({ ...transferForm, newDepartment: event.target.value })} list="transfer-department-options" required /></label>
-        <label>Новий підрозділ<input value={transferForm.newUnit} onChange={(event) => setTransferForm({ ...transferForm, newUnit: event.target.value })} placeholder="Необов’язково" /></label>
+        <label>Нове управління<select value={transferForm.newDepartmentId} onChange={(event) => { const selected = departments.find((item) => item.id === event.target.value); setTransferForm({ ...transferForm, newDepartmentId: event.target.value, newDepartment: selected?.name || '', newDepartmentUnitId: '', newUnit: '' }); }} disabled={isRegional} required><option value="">Оберіть управління</option>{departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label>Новий підрозділ<select value={transferForm.newDepartmentUnitId} onChange={(event) => { const selected = departmentUnits.find((item) => item.id === event.target.value); setTransferForm({ ...transferForm, newDepartmentUnitId: event.target.value, newUnit: selected?.name || '' }); }}><option value="">Без підрозділу</option>{transferUnits.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label>Коментар переміщення<textarea value={transferForm.comment} onChange={(event) => setTransferForm({ ...transferForm, comment: event.target.value })} placeholder="Причина або службовий коментар" /></label>
       </div>
       {error && <p className="message error" role="alert">{error}</p>}

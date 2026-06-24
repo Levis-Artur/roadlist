@@ -126,7 +126,7 @@ export async function deactivateVehicle(id: string): Promise<void> {
   }
 }
 
-export async function transferVehicle(id: string, input: { newDepartment: string; newUnit?: string | null; comment?: string | null }): Promise<Vehicle> {
+export async function transferVehicle(id: string, input: { newDepartmentId?: string | null; newDepartment: string; newDepartmentUnitId?: string | null; newUnit?: string | null; comment?: string | null }): Promise<Vehicle> {
   try {
     const vehicle = extractEntity<Vehicle>(await apiPost<unknown>(`/api/vehicles/${id}/transfer`, input), 'vehicle');
     if (!vehicle) throw new Error('Не вдалося перемістити автомобіль. Некоректна відповідь сервера.');
@@ -138,7 +138,16 @@ export async function transferVehicle(id: string, input: { newDepartment: string
     if (index < 0) throw new Error('Автомобіль не знайдено.');
     const activeShift = routeSheetStorage.getAll().find((item) => item.vehicleNumber === vehicles[index].plateNumber && item.status === 'active');
     if (activeShift) throw new Error('Неможливо перемістити автомобіль: по ньому є активна незавершена зміна.');
-    const updated = { ...vehicles[index], department: input.newDepartment, unit: input.newUnit ?? null, updatedAt: new Date().toISOString() };
+    const updated = {
+      ...vehicles[index],
+      department: input.newDepartment,
+      departmentId: input.newDepartmentId ?? vehicles[index].departmentId ?? null,
+      departmentName: input.newDepartment,
+      unit: input.newUnit ?? null,
+      departmentUnitId: input.newDepartmentUnitId ?? null,
+      departmentUnitName: input.newUnit ?? null,
+      updatedAt: new Date().toISOString(),
+    };
     vehicles[index] = updated;
     saveLocalVehicles(vehicles);
     await addAuditLog({ action: 'Автомобіль переміщено між управліннями', entityType: 'vehicle', entityId: id, details: `${input.newDepartment}${input.newUnit ? ` / ${input.newUnit}` : ''}` }).catch(() => undefined);

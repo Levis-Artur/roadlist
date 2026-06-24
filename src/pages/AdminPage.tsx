@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { OfficerDirectory } from '../components/OfficerDirectory';
 import { VehicleDirectory } from '../components/VehicleDirectory';
 import { AdminUsersDirectory } from '../components/AdminUsersDirectory';
+import { DepartmentDirectory } from '../components/DepartmentDirectory';
+import { DepartmentUnitDirectory } from '../components/DepartmentUnitDirectory';
 import { addAuditLog, clearAuditLogs, getAuditLogs } from '../services/auditService';
 import { clearOdometerPhotos, getOdometerPhoto } from '../services/photoService';
 import { clearRouteSheets, getRouteSheetById, getRouteSheets, markRouteSheetNeedsReview, updateRouteSheetAdminComment, verifyRouteSheet } from '../services/routeSheetService';
@@ -122,11 +124,12 @@ function StoredPhoto({ photoId, alt }: { photoId?: string; alt: string }) {
   return <div className="no-photo">{photoId ? 'Фото недоступне або було видалене.' : 'Фото відсутнє'}</div>;
 }
 
-type AdminSection = 'route_sheets' | 'monthly_route_sheets' | 'officers' | 'vehicles' | 'audit' | 'admins' | 'profile';
+type AdminSection = 'route_sheets' | 'monthly_route_sheets' | 'departments' | 'department_units' | 'officers' | 'vehicles' | 'audit' | 'admins' | 'profile';
 
 export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () => void }) {
   const [section, setSection] = useState<AdminSection>('route_sheets');
   const canManageAdmins = canManageAdminUsers(admin);
+  const canManageDepartments = admin.role === 'SYSTEM_OWNER' || admin.role === 'NATIONAL_ADMIN';
   const [routeSheets, setRouteSheets] = useState<RouteSheet[]>([]);
   const [monthlyRouteSheets, setMonthlyRouteSheets] = useState<MonthlyRouteSheet[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -393,6 +396,8 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
       <nav className="admin-nav" aria-label="Розділи адміністрування">
         <button className={section === 'route_sheets' ? 'active' : ''} onClick={() => setSection('route_sheets')}>Зміни</button>
         <button className={section === 'monthly_route_sheets' ? 'active' : ''} onClick={() => setSection('monthly_route_sheets')}>Маршрутні листи авто</button>
+        {canManageDepartments && <button className={section === 'departments' ? 'active' : ''} onClick={() => setSection('departments')}>Управління</button>}
+        <button className={section === 'department_units' ? 'active' : ''} onClick={() => setSection('department_units')}>Внутрішні підрозділи</button>
         <button className={section === 'officers' ? 'active' : ''} onClick={() => setSection('officers')}>Користувачі</button>
         <button className={section === 'vehicles' ? 'active' : ''} onClick={() => setSection('vehicles')}>Автомобілі</button>
         {canManageAdmins && <button className={section === 'admins' ? 'active' : ''} onClick={() => setSection('admins')}>Адміністратори</button>}
@@ -404,6 +409,8 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
 
       {adminError && <p className="message error" role="alert">{adminError}</p>}
 
+      {section === 'departments' && canManageDepartments && <DepartmentDirectory currentAdmin={admin} />}
+      {section === 'department_units' && <DepartmentUnitDirectory currentAdmin={admin} />}
       {section === 'officers' && <OfficerDirectory currentAdmin={admin} />}
       {section === 'vehicles' && <VehicleDirectory currentAdmin={admin} />}
       {section === 'admins' && canManageAdmins && <AdminUsersDirectory currentAdmin={admin} />}

@@ -18,6 +18,7 @@ function metadata(request: Request) {
     actorRole: request.admin?.role,
     actorDepartment: request.admin?.department ?? null,
     actorUnit: request.admin?.unit ?? null,
+    actorDepartmentId: request.admin?.departmentId ?? null,
   };
 }
 

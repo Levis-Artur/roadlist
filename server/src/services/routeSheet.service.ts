@@ -5,6 +5,7 @@ import type { AdminTokenPayload, FinishShiftInput, RequestMetadata, RouteSheetFi
 import { normalizeVehicleNumber } from '../utils/normalizeVehicleNumber.js';
 import { createAuditLog } from './audit.service.js';
 import { validateBadgeNumber } from '../utils/badgeNumber.js';
+import { assertDepartmentScope } from './organization.service.js';
 
 function requiredText(value: unknown, message: string): string {
   if (typeof value !== 'string' || !value.trim()) throw new AppError(message, 400);
@@ -72,6 +73,10 @@ async function getOrCreateMonthlyRouteSheet(
       vehicleModel: vehicle.model,
       department: vehicle.department,
       unit: vehicle.unit,
+      departmentId: vehicle.departmentId,
+      departmentName: vehicle.departmentName ?? vehicle.department,
+      departmentUnitId: vehicle.departmentUnitId,
+      departmentUnitName: vehicle.departmentUnitName ?? vehicle.unit,
       year,
       month,
       status: 'open',
@@ -147,8 +152,12 @@ export async function startShift(input: StartShiftInput, metadata: RequestMetada
           monthlyRouteSheetId: monthlyRouteSheet.id,
           badgeNumber,
           fullName: officer.fullName,
-          department: officer.department,
-          unit: vehicle.unit ?? officer.unit,
+          department: vehicle.departmentName ?? vehicle.department,
+          unit: vehicle.departmentUnitName ?? vehicle.unit ?? officer.departmentUnitName ?? officer.unit,
+          departmentId: vehicle.departmentId,
+          departmentName: vehicle.departmentName ?? vehicle.department,
+          departmentUnitId: vehicle.departmentUnitId,
+          departmentUnitName: vehicle.departmentUnitName ?? vehicle.unit,
           crewNumber,
           vehicleId: vehicle.id,
           vehicleNumber,
@@ -241,7 +250,7 @@ export async function finishShift(input: FinishShiftInput, metadata: RequestMeta
 }
 
 function assertDepartmentAccess(actor: AdminTokenPayload | undefined, department: string) {
-  if (actor?.role === 'REGIONAL_ADMIN' && department !== actor.department) {
+  if (actor?.role === 'REGIONAL_ADMIN' && department !== (actor.departmentName ?? actor.department)) {
     throw new AppError('Недостатньо прав для доступу до даних іншого управління', 403);
   }
 }
@@ -251,9 +260,14 @@ export async function listRouteSheets(filters: RouteSheetFilters, actor?: AdminT
   if (filters.status) where.status = filters.status;
   if (filters.badgeNumber) where.badgeNumber = filters.badgeNumber.trim();
   if (filters.vehicleNumber) where.vehicleNumber = normalizeVehicleNumber(filters.vehicleNumber);
-  if (actor?.role === 'REGIONAL_ADMIN') where.department = actor.department ?? '';
+  if (actor?.role === 'REGIONAL_ADMIN') {
+    if (actor.departmentId) where.departmentId = actor.departmentId;
+    else where.department = actor.departmentName ?? actor.department ?? '';
+  }
   else if (filters.department) where.department = { contains: filters.department, mode: 'insensitive' };
+  if (filters.departmentId && actor?.role !== 'REGIONAL_ADMIN') where.departmentId = filters.departmentId;
   if (filters.unit) where.unit = { contains: filters.unit, mode: 'insensitive' };
+  if (filters.departmentUnitId) where.departmentUnitId = filters.departmentUnitId;
   if (filters.search) {
     where.OR = [
       { fullName: { contains: filters.search, mode: 'insensitive' } },
@@ -279,14 +293,14 @@ export async function listActiveRouteSheetsForOfficer(badgeNumber: string) {
 export async function getRouteSheet(id: string, actor?: AdminTokenPayload) {
   const routeSheet = await prisma.routeSheet.findUnique({ where: { id } });
   if (!routeSheet) throw new AppError('Маршрутний лист не знайдено.', 404);
-  assertDepartmentAccess(actor, routeSheet.department);
+  assertDepartmentScope(actor, routeSheet);
   return routeSheet;
 }
 
 export async function verifyRouteSheet(id: string, comment?: unknown, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const routeSheet = await prisma.routeSheet.findUnique({ where: { id } });
   if (!routeSheet) throw new AppError('Маршрутний лист не знайдено.', 404);
-  assertDepartmentAccess(actor, routeSheet.department);
+  assertDepartmentScope(actor, routeSheet);
   if (routeSheet.status === 'active') throw new AppError('Неможливо перевірити активну незавершену зміну.', 400);
   const updated = await prisma.$transaction(async (tx) => {
     const item = await tx.routeSheet.update({
@@ -315,7 +329,7 @@ export async function verifyRouteSheet(id: string, comment?: unknown, metadata: 
 export async function markRouteSheetNeedsReview(id: string, comment?: unknown, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const routeSheet = await prisma.routeSheet.findUnique({ where: { id } });
   if (!routeSheet) throw new AppError('Маршрутний лист не знайдено.', 404);
-  assertDepartmentAccess(actor, routeSheet.department);
+  assertDepartmentScope(actor, routeSheet);
   if (!['completed', 'verified', 'needs_review'].includes(routeSheet.status)) {
     throw new AppError('Повернути на перевірку можна тільки завершену, перевірену або вже проблемну зміну.', 400);
   }
@@ -344,7 +358,7 @@ export async function markRouteSheetNeedsReview(id: string, comment?: unknown, m
 export async function updateRouteSheetAdminComment(id: string, comment?: unknown, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const routeSheet = await prisma.routeSheet.findUnique({ where: { id } });
   if (!routeSheet) throw new AppError('Маршрутний лист не знайдено.', 404);
-  assertDepartmentAccess(actor, routeSheet.department);
+  assertDepartmentScope(actor, routeSheet);
   const updated = await prisma.routeSheet.update({
     where: { id },
     data: {

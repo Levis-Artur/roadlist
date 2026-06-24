@@ -8,6 +8,7 @@ import { env } from '../config/env.js';
 import { AppError } from '../middleware/errorHandler.js';
 import type { AdminRole, AdminTokenPayload, AdminTwoFactorPendingPayload, RequestMetadata } from '../types/index.js';
 import { createAuditLog } from './audit.service.js';
+import { resolveDepartmentAssignment } from './organization.service.js';
 
 const ADMIN_ROLES: AdminRole[] = ['SYSTEM_OWNER', 'NATIONAL_ADMIN', 'REGIONAL_ADMIN'];
 const OWNER_LOCK_MESSAGE = 'Неможливо змінити системного власника через адміністративну панель';
@@ -52,6 +53,7 @@ function actorMetadata(actor: AdminTokenPayload | undefined, metadata: RequestMe
     actorRole: actor?.role,
     actorDepartment: actor?.department ?? null,
     actorUnit: actor?.unit ?? null,
+    actorDepartmentId: actor?.departmentId ?? null,
   };
 }
 
@@ -80,7 +82,7 @@ function validateRole(value: unknown): AdminRole {
 
 function validateDepartment(role: AdminRole, value: unknown): string | null {
   if (role !== 'REGIONAL_ADMIN') return null;
-  return required(value, 'УПП обов’язкове для регіонального адміністратора.');
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
 function uniqueAdminError(error: unknown): never {
@@ -92,13 +94,13 @@ function optionalText(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
-function fullAdminToken(admin: { id: string; username: string; role: string; department: string | null; unit?: string | null; mustChangePassword: boolean }) {
+function fullAdminToken(admin: { id: string; username: string; role: string; department: string | null; unit?: string | null; departmentId?: string | null; departmentName?: string | null; mustChangePassword: boolean }) {
   const role = validateRole(admin.role);
-  const payload: AdminTokenPayload = { adminId: admin.id, username: admin.username, role, department: admin.department, unit: admin.unit ?? null, mustChangePassword: admin.mustChangePassword };
+  const payload: AdminTokenPayload = { adminId: admin.id, username: admin.username, role, department: admin.department, unit: admin.unit ?? null, departmentId: admin.departmentId ?? null, departmentName: admin.departmentName ?? admin.department, mustChangePassword: admin.mustChangePassword };
   return jwt.sign(payload, env.jwtSecret, { expiresIn: env.adminJwtExpiresIn as SignOptions['expiresIn'], subject: admin.id });
 }
 
-function pendingAdminToken(admin: { id: string; username: string; role: string; department: string | null; unit?: string | null; mustChangePassword: boolean }) {
+function pendingAdminToken(admin: { id: string; username: string; role: string; department: string | null; unit?: string | null; departmentId?: string | null; departmentName?: string | null; mustChangePassword: boolean }) {
   const role = validateRole(admin.role);
   const payload: AdminTwoFactorPendingPayload = {
     adminId: admin.id,
@@ -106,6 +108,8 @@ function pendingAdminToken(admin: { id: string; username: string; role: string; 
     role,
     department: admin.department,
     unit: admin.unit ?? null,
+    departmentId: admin.departmentId ?? null,
+    departmentName: admin.departmentName ?? admin.department,
     purpose: 'ADMIN_2FA_PENDING',
     mustChangePassword: admin.mustChangePassword,
   };
@@ -131,7 +135,7 @@ export async function verifyAdminToken(tokenValue: unknown): Promise<AdminTokenP
   if (!admin || admin.username !== payload.username || !isAdminRole(admin.role)) {
     throw new AppError('Потрібна авторизація адміністратора', 401);
   }
-  return { adminId: admin.id, username: admin.username, role: validateRole(admin.role), department: admin.department, unit: admin.unit, mustChangePassword: admin.mustChangePassword };
+  return { adminId: admin.id, username: admin.username, role: validateRole(admin.role), department: admin.department, unit: admin.unit, departmentId: admin.departmentId, departmentName: admin.departmentName ?? admin.department, mustChangePassword: admin.mustChangePassword };
 }
 
 function checkIpRateLimit(ipAddress?: string) {
@@ -391,7 +395,8 @@ export async function createAdminUser(actor: AdminTokenPayload, input: Record<st
   ensureCanCreateRole(actor, role);
   const username = required(input.username, 'Логін обов’язковий.');
   const fullName = required(input.fullName, 'ПІБ обов’язкове.');
-  const department = validateDepartment(role, input.department);
+  const department = validateDepartment(role, input.departmentName ?? input.department);
+  const assignment = role === 'REGIONAL_ADMIN' ? await resolveDepartmentAssignment({ ...input, department: department ?? undefined }, actor) : null;
   const unit = role === 'REGIONAL_ADMIN' ? optionalText(input.unit) : null;
   const password = validatePasswordPolicy(input.password);
   try {
@@ -400,7 +405,9 @@ export async function createAdminUser(actor: AdminTokenPayload, input: Record<st
         username,
         fullName,
         role,
-        department,
+        department: assignment?.departmentName ?? department,
+        departmentId: assignment?.departmentId ?? null,
+        departmentName: assignment?.departmentName ?? null,
         unit,
         passwordHash: await bcrypt.hash(password, 10),
         isActive: input.isActive !== false,
@@ -416,7 +423,8 @@ export async function createAdminUser(actor: AdminTokenPayload, input: Record<st
       details: admin.username,
       targetAdminId: admin.id,
       targetRole: role,
-      targetDepartment: department,
+      targetDepartment: assignment?.departmentName ?? department,
+      targetDepartmentId: assignment?.departmentId ?? null,
       targetUnit: unit,
       ...actorMetadata(actor, metadata),
     });
@@ -439,6 +447,9 @@ export async function updateAdminUser(actor: AdminTokenPayload, id: string, inpu
     throw new AppError(OWNER_LOCK_MESSAGE, 403);
   }
   ensureCanManageTarget(actor, nextRole);
+  const nextAssignment = nextRole === 'REGIONAL_ADMIN'
+    ? await resolveDepartmentAssignment({ ...input, department: input.departmentName ?? input.department ?? current.departmentName ?? current.department }, actor)
+    : null;
   try {
     const admin = await prisma.adminUser.update({
       where: { id },
@@ -446,7 +457,9 @@ export async function updateAdminUser(actor: AdminTokenPayload, id: string, inpu
         username: input.username === undefined ? undefined : required(input.username, 'Логін обов’язковий.'),
         fullName: input.fullName === undefined ? undefined : required(input.fullName, 'ПІБ обов’язкове.'),
         role: nextRole,
-        department: input.department === undefined && nextRole === currentRole ? undefined : validateDepartment(nextRole, input.department ?? current.department),
+        department: nextAssignment?.departmentName ?? null,
+        departmentId: nextAssignment?.departmentId ?? null,
+        departmentName: nextAssignment?.departmentName ?? null,
         unit: nextRole === 'REGIONAL_ADMIN' ? input.unit === undefined ? undefined : optionalText(input.unit) : null,
         isActive: input.isActive === undefined ? undefined : Boolean(input.isActive),
       },
@@ -459,6 +472,7 @@ export async function updateAdminUser(actor: AdminTokenPayload, id: string, inpu
       targetAdminId: admin.id,
       targetRole: validateRole(admin.role),
       targetDepartment: admin.department,
+      targetDepartmentId: admin.departmentId,
       targetUnit: admin.unit,
       ...actorMetadata(actor, metadata),
     });

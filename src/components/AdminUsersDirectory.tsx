@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { DEPARTMENTS } from '../constants/departments';
-import type { AdminRole, AdminUser } from '../types';
+import type { AdminRole, AdminUser, Department } from '../types';
 import { adminRoleLabels, createAdminUser, deactivateAdminUser, getAdminUsers, resetAdminPassword, resetAdminTwoFactor, updateAdminUser } from '../services/adminService';
+import { getDepartments } from '../services/organizationService';
 
-const emptyForm = { username: '', fullName: '', role: 'REGIONAL_ADMIN' as AdminRole, department: '', unit: '', password: '', isActive: true };
+const emptyForm = { username: '', fullName: '', role: 'REGIONAL_ADMIN' as AdminRole, departmentId: '', department: '', unit: '', password: '', isActive: true };
 
 function formatDate(value?: string | null) {
   return value ? new Date(value).toLocaleString('uk-UA') : '—';
@@ -15,6 +15,7 @@ function isLocked(item: AdminUser) {
 
 export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser }) {
   const [items, setItems] = useState<AdminUser[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AdminUser | null>(null);
   const [form, setForm] = useState(emptyForm);
@@ -29,12 +30,12 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
     catch (caught) { setError(caught instanceof Error ? caught.message : 'Не вдалося завантажити адміністраторів.'); }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); void getDepartments().then(setDepartments).catch(() => undefined); }, []);
 
   function showForm(item?: AdminUser) {
     setEditing(item ?? null);
     setForm(item
-      ? { username: item.username, fullName: item.fullName, role: item.role, department: item.department ?? '', unit: item.unit ?? '', password: '', isActive: item.isActive }
+      ? { username: item.username, fullName: item.fullName, role: item.role, departmentId: item.departmentId ?? '', department: item.departmentName ?? item.department ?? '', unit: item.unit ?? '', password: '', isActive: item.isActive }
       : { ...emptyForm, role: availableRoles[0] });
     setOpen(true);
     setError('');
@@ -56,7 +57,9 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
         username: form.username.trim(),
         fullName: form.fullName.trim(),
         role: form.role,
+        departmentId: form.role === 'REGIONAL_ADMIN' ? form.departmentId || null : null,
         department: form.role === 'REGIONAL_ADMIN' ? form.department.trim() : null,
+        departmentName: form.role === 'REGIONAL_ADMIN' ? form.department.trim() : null,
         unit: form.role === 'REGIONAL_ADMIN' ? form.unit.trim() || null : null,
         password: form.password.trim() || undefined,
         isActive: form.isActive,
@@ -129,12 +132,11 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
       </table></div></div>
       {open && <div className="modal-backdrop" onMouseDown={() => setOpen(false)}><form className="modal directory-modal" onSubmit={save} onMouseDown={(e) => e.stopPropagation()}>
         <div className="section-heading"><h2>{editing ? 'Редагування адміністратора' : 'Новий адміністратор'}</h2><button type="button" className="text-button" onClick={() => setOpen(false)}>Закрити</button></div>
-        <datalist id="admin-department-options">{DEPARTMENTS.map((item) => <option key={item} value={item} />)}</datalist>
         <div className="form-grid">
           <label>Логін<input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} required /></label>
           <label>ПІБ<input value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required /></label>
           <label>Роль<select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as AdminRole })}>{availableRoles.map((role) => <option key={role} value={role}>{adminRoleLabels[role]}</option>)}</select></label>
-          {form.role === 'REGIONAL_ADMIN' && <label>УПП<input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} list="admin-department-options" required /></label>}
+          {form.role === 'REGIONAL_ADMIN' && <label>Управління<select value={form.departmentId} onChange={(e) => { const selected = departments.find((item) => item.id === e.target.value); setForm({ ...form, departmentId: e.target.value, department: selected?.name || '' }); }} required><option value="">Оберіть управління</option>{departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
           {form.role === 'REGIONAL_ADMIN' && <label>Підрозділ<input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="Необов’язково" /></label>}
           <label>{editing ? 'Новий тимчасовий пароль' : 'Тимчасовий пароль'}<input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required={!editing} /><small>Це тимчасовий пароль. Після першого входу адміністратор повинен змінити його.</small></label>
           <label className="checkbox-filter"><input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />Активний</label>

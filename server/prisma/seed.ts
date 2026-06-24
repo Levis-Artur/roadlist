@@ -19,7 +19,32 @@ const vehicles = [
   },
 ];
 
+const departments = [
+  { name: 'УПП у Волинській області', code: 'VOLYN', region: 'Волинська область' },
+  { name: 'УПП у м. Києві', code: 'KYIV_CITY', region: 'м. Київ' },
+  { name: 'УПП у Львівській області', code: 'LVIV', region: 'Львівська область' },
+];
+
+const defaultUnits = ['Апарат', 'Пресслужба', 'Адміністративна практика', 'ТОР', 'ГОР', 'ТАКТІМ', 'Батальйон 1', 'Рота 1'];
+
 async function main() {
+  const departmentByName = new Map<string, { id: string; name: string }>();
+  for (const department of departments) {
+    const item = await prisma.department.upsert({
+      where: { name: department.name },
+      update: { code: department.code, region: department.region, isActive: true },
+      create: { ...department, isActive: true },
+    });
+    departmentByName.set(item.name, item);
+    for (const unitName of defaultUnits) {
+      await prisma.departmentUnit.upsert({
+        where: { departmentId_name: { departmentId: item.id, name: unitName } },
+        update: { isActive: true },
+        create: { departmentId: item.id, name: unitName, isActive: true },
+      });
+    }
+  }
+
   const owner = await prisma.adminUser.findUnique({ where: { username: 'owner' } });
   if (owner) {
     await prisma.adminUser.update({
@@ -28,6 +53,8 @@ async function main() {
         fullName: 'Левіс Артур Сергійович',
         role: 'SYSTEM_OWNER',
         department: null,
+        departmentId: null,
+        departmentName: null,
         isActive: true,
         createdById: null,
       },
@@ -40,6 +67,8 @@ async function main() {
         fullName: 'Левіс Артур Сергійович',
         role: 'SYSTEM_OWNER',
         department: null,
+        departmentId: null,
+        departmentName: null,
         passwordHash: ownerPasswordHash,
         isActive: true,
         mustChangePassword: true,
@@ -62,17 +91,19 @@ async function main() {
   for (const officer of officers) {
     const { pin, ...officerData } = officer;
     const pinHash = await bcrypt.hash(pin, 10);
+    const department = departmentByName.get(officer.department);
     await prisma.officer.upsert({
       where: { badgeNumber: officer.badgeNumber },
-      update: { ...officerData, pinHash, isActive: true },
-      create: { ...officerData, pinHash },
+      update: { ...officerData, departmentId: department?.id, departmentName: department?.name ?? officer.department, pinHash, isActive: true },
+      create: { ...officerData, departmentId: department?.id, departmentName: department?.name ?? officer.department, pinHash },
     });
   }
   for (const vehicle of vehicles) {
+    const department = departmentByName.get(vehicle.department);
     await prisma.vehicle.upsert({
       where: { plateNumber: vehicle.plateNumber },
-      update: { ...vehicle, isActive: true },
-      create: { ...vehicle, isActive: true },
+      update: { ...vehicle, departmentId: department?.id, departmentName: department?.name ?? vehicle.department, isActive: true },
+      create: { ...vehicle, departmentId: department?.id, departmentName: department?.name ?? vehicle.department, isActive: true },
     });
   }
   console.log(`Seeded 1 system owner, ${officers.length} officers and ${vehicles.length} vehicles.`);

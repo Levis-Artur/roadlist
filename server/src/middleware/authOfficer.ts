@@ -7,6 +7,10 @@ interface OfficerTokenPayload extends jwt.JwtPayload {
   fullName: string;
   department: string;
   unit?: string | null;
+  departmentId?: string | null;
+  departmentName?: string | null;
+  departmentUnitId?: string | null;
+  departmentUnitName?: string | null;
 }
 
 export function authOfficer(request: Request, response: Response, next: NextFunction) {
@@ -21,6 +25,10 @@ export function authOfficer(request: Request, response: Response, next: NextFunc
       fullName: payload.fullName,
       department: payload.department,
       unit: payload.unit ?? null,
+      departmentId: payload.departmentId ?? null,
+      departmentName: payload.departmentName ?? payload.department,
+      departmentUnitId: payload.departmentUnitId ?? null,
+      departmentUnitName: payload.departmentUnitName ?? payload.unit ?? null,
     };
     next();
   } catch {

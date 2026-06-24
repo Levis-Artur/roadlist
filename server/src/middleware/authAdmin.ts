@@ -28,7 +28,7 @@ export async function authAdmin(request: Request, response: Response, next: Next
     if (!payload.adminId || !payload.username || !isAdminRole(payload.role)) throw new Error('invalid token');
     const admin = await prisma.adminUser.findFirst({
       where: { id: payload.adminId, isActive: true },
-      select: { id: true, username: true, role: true, department: true, unit: true, mustChangePassword: true, twoFactorEnabled: true },
+      select: { id: true, username: true, role: true, department: true, unit: true, departmentId: true, departmentName: true, mustChangePassword: true, twoFactorEnabled: true },
     });
     if (!admin || admin.username !== payload.username || !isAdminRole(admin.role)) throw new Error('inactive admin');
     request.admin = {
@@ -37,6 +37,8 @@ export async function authAdmin(request: Request, response: Response, next: Next
       role: admin.role,
       department: admin.department,
       unit: admin.unit,
+      departmentId: admin.departmentId,
+      departmentName: admin.departmentName,
       mustChangePassword: admin.mustChangePassword,
     };
     if (admin.mustChangePassword && request.path !== '/change-password' && request.path !== '/logout') {

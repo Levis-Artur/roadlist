@@ -10,8 +10,12 @@ export async function listAuditLogs(actor?: AdminTokenPayload) {
     where: actor?.role === 'REGIONAL_ADMIN'
       ? {
           OR: [
+            { actorDepartmentId: actor.departmentId ?? '' },
+            { targetDepartmentId: actor.departmentId ?? '' },
             { actorDepartment: actor.department ?? '' },
+            { actorDepartment: actor.departmentName ?? '' },
             { targetDepartment: actor.department ?? '' },
+            { targetDepartment: actor.departmentName ?? '' },
             { details: { contains: actor.department ?? '', mode: 'insensitive' } },
           ],
         }

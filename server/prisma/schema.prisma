@@ -7,16 +7,53 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Department {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  code      String?  @unique
+  region    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  units     DepartmentUnit[]
+
+  @@index([isActive])
+  @@index([region])
+}
+
+model DepartmentUnit {
+  id           String     @id @default(uuid())
+  departmentId String
+  name         String
+  type         String?
+  code         String?
+  description  String?
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  department   Department @relation(fields: [departmentId], references: [id])
+
+  @@unique([departmentId, name])
+  @@index([departmentId, isActive])
+}
+
 model Officer {
   id          String   @id @default(uuid())
   badgeNumber String   @unique
   fullName    String
   department  String
   unit        String?
+  departmentId String?
+  departmentName String?
+  departmentUnitId String?
+  departmentUnitName String?
   pinHash     String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([departmentId, isActive])
+  @@index([departmentUnitId, isActive])
 }
 
 model Vehicle {
@@ -27,6 +64,10 @@ model Vehicle {
   model              String
   department         String
   unit               String?
+  departmentId       String?
+  departmentName     String?
+  departmentUnitId   String?
+  departmentUnitName String?
   isActive           Boolean  @default(true)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -34,6 +75,8 @@ model Vehicle {
   transferHistory    VehicleTransferHistory[]
 
   @@index([department, isActive])
+  @@index([departmentId, isActive])
+  @@index([departmentUnitId, isActive])
 }
 
 model VehicleTransferHistory {
@@ -43,8 +86,16 @@ model VehicleTransferHistory {
   displayVehicleNumber  String?
   fromDepartment        String?
   fromUnit              String?
+  fromDepartmentId      String?
+  fromDepartmentName    String?
+  fromDepartmentUnitId  String?
+  fromDepartmentUnitName String?
   toDepartment          String
   toUnit                String?
+  toDepartmentId        String?
+  toDepartmentName      String?
+  toDepartmentUnitId    String?
+  toDepartmentUnitName  String?
   comment               String?
   transferredByAdminId  String?
   transferredByUsername String?
@@ -54,6 +105,7 @@ model VehicleTransferHistory {
 
   @@index([vehicleId])
   @@index([toDepartment, toUnit])
+  @@index([toDepartmentId, toDepartmentUnitId])
   @@index([transferredAt])
 }
 
@@ -66,6 +118,10 @@ model VehicleMonthlyRouteSheet {
   vehicleModel         String
   department           String
   unit                 String?
+  departmentId         String?
+  departmentName       String?
+  departmentUnitId     String?
+  departmentUnitName   String?
   year                 Int
   month                Int
   status               String       @default("open")
@@ -86,6 +142,7 @@ model VehicleMonthlyRouteSheet {
   @@unique([vehicleId, year, month])
   @@index([vehicleNumber, year, month])
   @@index([status])
+  @@index([departmentId, departmentUnitId])
 }
 
 model RouteSheet {
@@ -96,6 +153,10 @@ model RouteSheet {
   fullName             String
   department           String
   unit                 String?
+  departmentId         String?
+  departmentName       String?
+  departmentUnitId     String?
+  departmentUnitName   String?
   crewNumber           String?
   vehicleId            String?
   vehicleNumber        String
@@ -128,6 +189,7 @@ model RouteSheet {
   @@index([vehicleNumber, status])
   @@index([monthlyRouteSheetId])
   @@index([createdAt])
+  @@index([departmentId, departmentUnitId])
 }
 
 model OdometerPhoto {
@@ -154,6 +216,8 @@ model AdminUser {
   role                String
   department          String?
   unit                String?
+  departmentId        String?
+  departmentName      String?
   passwordHash        String
   isActive            Boolean   @default(true)
   mustChangePassword  Boolean   @default(false)
@@ -173,6 +237,7 @@ model AdminUser {
 
   @@index([role, isActive])
   @@index([department, isActive])
+  @@index([departmentId, isActive])
   @@index([lockedUntil])
   @@index([twoFactorEnabled])
 }
@@ -191,10 +256,12 @@ model AuditLog {
   actorRole         String?
   actorDepartment   String?
   actorUnit         String?
+  actorDepartmentId String?
   targetAdminId     String?
   targetRole        String?
   targetDepartment  String?
   targetUnit        String?
+  targetDepartmentId String?
   createdAt         DateTime @default(now())
 
   @@index([createdAt])

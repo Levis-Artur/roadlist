@@ -4,6 +4,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import type { AdminTokenPayload, RequestMetadata } from '../types/index.js';
 import { normalizeVehicleNumber } from '../utils/normalizeVehicleNumber.js';
 import { createAuditLog } from './audit.service.js';
+import { assertDepartmentScope, resolveDepartmentAssignment } from './organization.service.js';
 
 const FOREIGN_DEPARTMENT_MESSAGE = 'Недостатньо прав для доступу до даних іншого управління';
 
@@ -27,7 +28,7 @@ export async function listAvailableVehicles() {
   const vehicles = await prisma.vehicle.findMany({
     where: { isActive: true },
     orderBy: [{ brand: 'asc' }, { model: 'asc' }],
-    select: { id: true, plateNumber: true, displayPlateNumber: true, brand: true, model: true, department: true, unit: true, isActive: true, createdAt: true, updatedAt: true },
+    select: { id: true, plateNumber: true, displayPlateNumber: true, brand: true, model: true, department: true, unit: true, departmentId: true, departmentName: true, departmentUnitId: true, departmentUnitName: true, isActive: true, createdAt: true, updatedAt: true },
   });
   const activeShifts = await prisma.routeSheet.findMany({
     where: { status: 'active', vehicleNumber: { in: vehicles.map((vehicle) => vehicle.plateNumber) } },
@@ -66,11 +67,11 @@ export async function listAvailableVehicles() {
 }
 
 function scopedDepartment(actor?: AdminTokenPayload, requestedDepartment?: string) {
-  return actor?.role === 'REGIONAL_ADMIN' ? actor.department ?? '' : requestedDepartment;
+  return actor?.role === 'REGIONAL_ADMIN' ? actor.departmentName ?? actor.department ?? '' : requestedDepartment;
 }
 
 function assertDepartmentAccess(actor: AdminTokenPayload | undefined, department: string) {
-  if (actor?.role === 'REGIONAL_ADMIN' && department !== actor.department) {
+  if (actor?.role === 'REGIONAL_ADMIN' && department !== (actor.departmentName ?? actor.department)) {
     throw new AppError(FOREIGN_DEPARTMENT_MESSAGE, 403);
   }
 }
@@ -78,12 +79,18 @@ function assertDepartmentAccess(actor: AdminTokenPayload | undefined, department
 export async function listVehicles(filters: Record<string, unknown> = {}, actor?: AdminTokenPayload) {
   const search = typeof filters.search === 'string' ? filters.search.trim() : '';
   const department = scopedDepartment(actor, typeof filters.department === 'string' ? filters.department.trim() : '');
+  const departmentId = actor?.role === 'REGIONAL_ADMIN'
+    ? actor.departmentId ?? ''
+    : typeof filters.departmentId === 'string' ? filters.departmentId.trim() : '';
   const unit = typeof filters.unit === 'string' ? filters.unit.trim() : '';
+  const departmentUnitId = typeof filters.departmentUnitId === 'string' ? filters.departmentUnitId.trim() : '';
   const isActive = filters.isActive === 'true' ? true : filters.isActive === 'false' ? false : undefined;
   const normalizedSearch = search ? normalizeVehicleNumber(search) : '';
   return prisma.vehicle.findMany({
     where: {
       isActive,
+      departmentId: departmentId || undefined,
+      departmentUnitId: departmentUnitId || undefined,
       department: department ? { contains: department, mode: 'insensitive' } : undefined,
       unit: unit ? { contains: unit, mode: 'insensitive' } : undefined,
       OR: search ? [
@@ -102,20 +109,12 @@ export async function createVehicle(input: Record<string, unknown>, metadata: Re
   const plateNumber = normalizeVehicleNumber(displayPlateNumber);
   const brand = required(input.brand, 'Марка обов’язкова.');
   const model = required(input.model, 'Модель обов’язкова.');
-  const department = actor?.role === 'REGIONAL_ADMIN'
-    ? actor.department ?? ''
-    : required(input.department, 'УПП обов’язкове.');
-  if (!department) throw new AppError('УПП обов’язкове.', 400);
-  if (actor?.role === 'REGIONAL_ADMIN' && typeof input.department === 'string' && input.department.trim() && input.department.trim() !== department) {
-    throw new AppError('Регіональний адміністратор може створювати автомобілі тільки у своєму управлінні.', 403);
-  }
-  const unit = optionalText(input.unit);
-  assertDepartmentAccess(actor, department);
+  const assignment = await resolveDepartmentAssignment(input, actor);
   try {
     const vehicle = await prisma.vehicle.create({
-      data: { plateNumber, displayPlateNumber, brand, model, department, unit, isActive: input.isActive !== false },
+      data: { plateNumber, displayPlateNumber, brand, model, ...assignment, isActive: input.isActive !== false },
     });
-    await createAuditLog({ action: 'Створено автомобіль', entityType: 'vehicle', entityId: vehicle.id, details: `${plateNumber}; ${brand} ${model}`, targetDepartment: department, targetUnit: unit, ...metadata });
+    await createAuditLog({ action: 'Створено автомобіль', entityType: 'vehicle', entityId: vehicle.id, details: `${plateNumber}; ${brand} ${model}`, targetDepartment: vehicle.department, targetDepartmentId: vehicle.departmentId, targetUnit: vehicle.unit, ...metadata });
     return vehicle;
   } catch (error) { uniqueVehicleError(error); }
 }
@@ -123,16 +122,14 @@ export async function createVehicle(input: Record<string, unknown>, metadata: Re
 export async function updateVehicle(id: string, input: Record<string, unknown>, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const current = await prisma.vehicle.findUnique({ where: { id } });
   if (!current) throw new AppError('Автомобіль не знайдено.', 404);
-  assertDepartmentAccess(actor, current.department);
+  assertDepartmentScope(actor, current);
   const displayPlateNumber = input.displayPlateNumber === undefined
     ? current.displayPlateNumber ?? current.plateNumber
     : required(input.displayPlateNumber, 'Номерний знак обов’язковий.');
   const plateNumber = normalizeVehicleNumber(displayPlateNumber);
-  const nextDepartment = actor?.role === 'REGIONAL_ADMIN'
-    ? current.department
-    : input.department === undefined ? current.department : required(input.department, 'УПП обов’язкове.');
-  const nextUnit = input.unit === undefined ? undefined : optionalText(input.unit);
-  assertDepartmentAccess(actor, nextDepartment);
+  const assignment = input.department === undefined && input.departmentId === undefined && input.departmentName === undefined && input.unit === undefined && input.departmentUnitId === undefined && input.departmentUnitName === undefined
+    ? {}
+    : await resolveDepartmentAssignment({ department: current.department, departmentId: current.departmentId, departmentName: current.departmentName, departmentUnitId: current.departmentUnitId, departmentUnitName: current.departmentUnitName, unit: current.unit, ...input }, actor);
   try {
     const vehicle = await prisma.vehicle.update({
       where: { id },
@@ -141,8 +138,7 @@ export async function updateVehicle(id: string, input: Record<string, unknown>, 
         displayPlateNumber,
         brand: input.brand === undefined ? undefined : required(input.brand, 'Марка обов’язкова.'),
         model: input.model === undefined ? undefined : required(input.model, 'Модель обов’язкова.'),
-        department: actor?.role === 'REGIONAL_ADMIN' || input.department === undefined ? undefined : nextDepartment,
-        unit: nextUnit,
+        ...assignment,
         isActive: input.isActive === undefined ? undefined : Boolean(input.isActive),
       },
     });
@@ -154,17 +150,16 @@ export async function updateVehicle(id: string, input: Record<string, unknown>, 
 export async function deactivateVehicle(id: string, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const current = await prisma.vehicle.findUnique({ where: { id } });
   if (!current) throw new AppError('Автомобіль не знайдено.', 404);
-  assertDepartmentAccess(actor, current.department);
+  assertDepartmentScope(actor, current);
   await prisma.vehicle.update({ where: { id }, data: { isActive: false } });
   await createAuditLog({ action: 'Деактивовано автомобіль', entityType: 'vehicle', entityId: id, details: current.plateNumber, ...metadata });
 }
 
 export async function transferVehicle(id: string, input: Record<string, unknown>, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
-  if (!actor || actor.role === 'REGIONAL_ADMIN') {
-    throw new AppError('Недостатньо прав для переміщення автомобіля між управліннями.', 403);
-  }
+  if (!actor) throw new AppError('Потрібна авторизація адміністратора.', 401);
   const current = await prisma.vehicle.findUnique({ where: { id } });
   if (!current) throw new AppError('Автомобіль не знайдено.', 404);
+  assertDepartmentScope(actor, current);
   const activeShift = await prisma.routeSheet.findFirst({
     where: { vehicleNumber: current.plateNumber, status: 'active' },
     select: { id: true },
@@ -172,13 +167,22 @@ export async function transferVehicle(id: string, input: Record<string, unknown>
   if (activeShift) {
     throw new AppError('Неможливо перемістити автомобіль: по ньому є активна незавершена зміна.', 409);
   }
-  const newDepartment = required(input.newDepartment, 'Нове управління обов’язкове.');
-  const newUnit = optionalText(input.newUnit);
+  const assignment = await resolveDepartmentAssignment({
+    departmentId: input.newDepartmentId ?? input.departmentId,
+    departmentName: input.newDepartmentName ?? input.newDepartment,
+    department: input.newDepartment ?? input.department,
+    departmentUnitId: input.newDepartmentUnitId ?? input.departmentUnitId,
+    departmentUnitName: input.newDepartmentUnitName ?? input.newUnit,
+    unit: input.newUnit ?? input.unit,
+  }, actor);
+  if (actor.role === 'REGIONAL_ADMIN' && assignment.departmentId !== (actor.departmentId ?? current.departmentId)) {
+    throw new AppError('Регіональний адміністратор може переміщати авто тільки між підрозділами свого управління.', 403);
+  }
   const comment = optionalText(input.comment);
   const updated = await prisma.$transaction(async (tx) => {
     const vehicle = await tx.vehicle.update({
       where: { id },
-      data: { department: newDepartment, unit: newUnit },
+      data: assignment,
     });
     await tx.vehicleTransferHistory.create({
       data: {
@@ -187,8 +191,16 @@ export async function transferVehicle(id: string, input: Record<string, unknown>
         displayVehicleNumber: current.displayPlateNumber,
         fromDepartment: current.department,
         fromUnit: current.unit,
-        toDepartment: newDepartment,
-        toUnit: newUnit,
+        fromDepartmentId: current.departmentId,
+        fromDepartmentName: current.departmentName ?? current.department,
+        fromDepartmentUnitId: current.departmentUnitId,
+        fromDepartmentUnitName: current.departmentUnitName ?? current.unit,
+        toDepartment: assignment.department,
+        toUnit: assignment.unit,
+        toDepartmentId: assignment.departmentId,
+        toDepartmentName: assignment.departmentName,
+        toDepartmentUnitId: assignment.departmentUnitId,
+        toDepartmentUnitName: assignment.departmentUnitName,
         comment,
         transferredByAdminId: actor.adminId,
         transferredByUsername: actor.username,
@@ -201,9 +213,10 @@ export async function transferVehicle(id: string, input: Record<string, unknown>
     action: 'Автомобіль переміщено між управліннями',
     entityType: 'vehicle',
     entityId: id,
-    details: `${current.department}${current.unit ? ` / ${current.unit}` : ''} → ${newDepartment}${newUnit ? ` / ${newUnit}` : ''}${comment ? `; ${comment}` : ''}`,
-    targetDepartment: newDepartment,
-    targetUnit: newUnit,
+    details: `${current.departmentName ?? current.department}${current.departmentUnitName ?? current.unit ? ` / ${current.departmentUnitName ?? current.unit}` : ''} → ${assignment.departmentName}${assignment.departmentUnitName ? ` / ${assignment.departmentUnitName}` : ''}${comment ? `; ${comment}` : ''}`,
+    targetDepartment: assignment.departmentName,
+    targetDepartmentId: assignment.departmentId,
+    targetUnit: assignment.departmentUnitName,
     ...metadata,
   });
   return updated;
@@ -212,6 +225,6 @@ export async function transferVehicle(id: string, input: Record<string, unknown>
 export async function listVehicleTransferHistory(id: string, actor?: AdminTokenPayload) {
   const vehicle = await prisma.vehicle.findUnique({ where: { id } });
   if (!vehicle) throw new AppError('Автомобіль не знайдено.', 404);
-  assertDepartmentAccess(actor, vehicle.department);
+  assertDepartmentScope(actor, vehicle);
   return prisma.vehicleTransferHistory.findMany({ where: { vehicleId: id }, orderBy: { transferredAt: 'desc' } });
 }

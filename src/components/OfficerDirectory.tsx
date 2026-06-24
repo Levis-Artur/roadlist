@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { DEPARTMENTS } from '../constants/departments';
 import { createOfficer, deactivateOfficer, getOfficers, PIN_ERROR, updateOfficer } from '../services/officerService';
-import type { AdminUser, CreateOfficerInput, Officer } from '../types';
+import { getDepartments, getDepartmentUnits } from '../services/organizationService';
+import type { AdminUser, CreateOfficerInput, Department, DepartmentUnit, Officer } from '../types';
 import { BADGE_NUMBER_ERROR, isValidBadgeNumber, sanitizeBadgeNumber } from '../utils/badgeNumber';
 
 function defaultForm(currentAdmin: AdminUser): CreateOfficerInput {
@@ -10,6 +11,10 @@ function defaultForm(currentAdmin: AdminUser): CreateOfficerInput {
     fullName: '',
     department: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.department || '' : DEPARTMENTS[0],
     unit: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.unit || '' : '',
+    departmentId: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.departmentId || null : null,
+    departmentName: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.departmentName || currentAdmin.department || '' : DEPARTMENTS[0],
+    departmentUnitId: null,
+    departmentUnitName: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.unit || '' : '',
     pin: '',
     isActive: true,
   };
@@ -40,6 +45,8 @@ function downloadCsv(officers: Officer[]) {
 export function OfficerDirectory({ currentAdmin }: { currentAdmin: AdminUser }) {
   const isRegional = currentAdmin.role === 'REGIONAL_ADMIN';
   const [officers, setOfficers] = useState<Officer[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [departmentUnits, setDepartmentUnits] = useState<DepartmentUnit[]>([]);
   const [search, setSearch] = useState('');
   const [department, setDepartment] = useState('');
   const [unit, setUnit] = useState('');
@@ -55,8 +62,14 @@ export function OfficerDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
     setLoading(true);
     setError('');
     try {
-      const result = await getOfficers(isRegional ? { department: currentAdmin.department || '' } : {});
+      const [result, departmentItems, unitItems] = await Promise.all([
+        getOfficers(isRegional ? { departmentId: currentAdmin.departmentId || undefined, department: currentAdmin.department || '' } : {}),
+        getDepartments(),
+        getDepartmentUnits(),
+      ]);
       setOfficers(Array.isArray(result) ? result : []);
+      setDepartments(departmentItems);
+      setDepartmentUnits(unitItems);
     } catch (caught) {
       console.error('[OfficerDirectory] load failed', caught);
       setOfficers([]);
@@ -76,6 +89,30 @@ export function OfficerDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
       && (status === 'all' || Boolean(item.isActive !== false) === (status === 'active'));
   }), [department, isRegional, officers, search, status, unit]);
 
+  const formUnits = useMemo(() => departmentUnits.filter((item) => item.departmentId === form.departmentId), [departmentUnits, form.departmentId]);
+
+  function patchDepartment(departmentId: string) {
+    const selected = departments.find((item) => item.id === departmentId);
+    setForm({ ...form, departmentId, departmentName: selected?.name || '', department: selected?.name || '', departmentUnitId: null, departmentUnitName: '', unit: '' });
+  }
+
+  function patchUnit(departmentUnitId: string) {
+    const selected = departmentUnits.find((item) => item.id === departmentUnitId);
+    setForm({ ...form, departmentUnitId: departmentUnitId || null, departmentUnitName: selected?.name || '', unit: selected?.name || '' });
+  }
+
+  function blankForm(): CreateOfficerInput {
+    const departmentItem = isRegional
+      ? departments.find((item) => item.id === currentAdmin.departmentId) || departments.find((item) => item.name === currentAdmin.department)
+      : departments[0];
+    return {
+      ...defaultForm(currentAdmin),
+      departmentId: departmentItem?.id || currentAdmin.departmentId || null,
+      department: departmentItem?.name || currentAdmin.department || DEPARTMENTS[0],
+      departmentName: departmentItem?.name || currentAdmin.departmentName || currentAdmin.department || DEPARTMENTS[0],
+    };
+  }
+
   function showForm(officer?: Officer) {
     setEditing(officer);
     setError('');
@@ -85,9 +122,13 @@ export function OfficerDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
       fullName: officer.fullName,
       department: isRegional ? currentAdmin.department || officer.department : officer.department,
       unit: officer.unit || '',
+      departmentId: isRegional ? currentAdmin.departmentId || officer.departmentId || null : officer.departmentId || null,
+      departmentName: officer.departmentName || officer.department,
+      departmentUnitId: officer.departmentUnitId || null,
+      departmentUnitName: officer.departmentUnitName || officer.unit || '',
       pin: '',
       isActive: officer.isActive !== false,
-    } : defaultForm(currentAdmin));
+    } : blankForm());
     setOpen(true);
   }
 
@@ -97,7 +138,11 @@ export function OfficerDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
     const normalizedForm = {
       ...form,
       department: isRegional ? currentAdmin.department || '' : form.department,
+      departmentId: isRegional ? currentAdmin.departmentId || form.departmentId : form.departmentId,
+      departmentName: isRegional ? currentAdmin.departmentName || currentAdmin.department || form.department : form.departmentName || form.department,
       unit: form.unit?.trim() || null,
+      departmentUnitId: form.departmentUnitId || null,
+      departmentUnitName: form.departmentUnitName || form.unit?.trim() || null,
     };
     if (!isValidBadgeNumber(normalizedForm.badgeNumber)) {
       setError(BADGE_NUMBER_ERROR);
@@ -158,13 +203,12 @@ export function OfficerDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
 
     {open && <div className="modal-backdrop" onMouseDown={() => setOpen(false)}><form className="modal directory-modal" onSubmit={save} onMouseDown={(event) => event.stopPropagation()}>
       <div className="section-heading"><h2>{editing ? 'Редагування патрульного' : 'Новий патрульний'}</h2><button type="button" className="text-button" onClick={() => setOpen(false)}>Закрити</button></div>
-      <datalist id="department-options">{DEPARTMENTS.map((item) => <option key={item} value={item} />)}</datalist>
       <div className="form-grid">
         <label>Номер жетона<input value={form.badgeNumber} onChange={(event) => setForm({ ...form, badgeNumber: sanitizeBadgeNumber(event.target.value) })} onPaste={(event) => { event.preventDefault(); setForm({ ...form, badgeNumber: sanitizeBadgeNumber(event.clipboardData.getData('text')) }); }} inputMode="numeric" maxLength={7} placeholder="0000001" required /></label>
         <label>{editing ? 'Новий PIN' : 'PIN'}<input type="password" value={form.pin} onChange={(event) => setForm({ ...form, pin: event.target.value.replace(/\D/g, '').slice(0, 8) })} inputMode="numeric" minLength={4} maxLength={8} placeholder={editing ? 'Залиште порожнім без змін' : '4–8 цифр'} required={!editing} /><small>{editing ? 'Необов’язково. Поточний PIN не показується.' : 'Від 4 до 8 цифр.'}</small></label>
         <label>ПІБ<input value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} required /></label>
-        <label>УПП<input value={isRegional ? currentAdmin.department || '' : form.department} onChange={(event) => setForm({ ...form, department: event.target.value })} list="department-options" readOnly={isRegional} required /></label>
-        <label>Підрозділ<input value={form.unit || ''} onChange={(event) => setForm({ ...form, unit: event.target.value })} placeholder="Необов’язково" /></label>
+        <label>Управління<select value={form.departmentId || ''} onChange={(event) => patchDepartment(event.target.value)} disabled={isRegional} required><option value="">Оберіть управління</option>{departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label>Внутрішній підрозділ<select value={form.departmentUnitId || ''} onChange={(event) => patchUnit(event.target.value)}><option value="">Без підрозділу</option>{formUnits.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label className="checkbox-filter"><input type="checkbox" checked={form.isActive} onChange={(event) => setForm({ ...form, isActive: event.target.checked })} />Активний</label>
       </div>
       {error && <p className="message error" role="alert">{error}</p>}
