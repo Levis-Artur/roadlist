@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AdminRole, AdminUser, Department } from '../types';
-import { adminRoleLabels, createAdminUser, deactivateAdminUser, getAdminUsers, resetAdminPassword, resetAdminTwoFactor, updateAdminUser } from '../services/adminService';
+import { adminRoleLabels, canDeleteRecords, createAdminUser, deactivateAdminUser, getAdminUsers, resetAdminPassword, resetAdminTwoFactor, updateAdminUser } from '../services/adminService';
 import { getDepartments } from '../services/organizationService';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 
 const emptyForm = { username: '', fullName: '', role: 'REGIONAL_ADMIN' as AdminRole, departmentId: '', department: '', unit: '', password: '', isActive: true };
 
@@ -21,6 +22,8 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const canDelete = canDeleteRecords(currentAdmin);
   const availableRoles = useMemo<AdminRole[]>(() => (
     currentAdmin.role === 'SYSTEM_OWNER' ? ['NATIONAL_ADMIN', 'REGIONAL_ADMIN'] : ['REGIONAL_ADMIN']
   ), [currentAdmin.role]);
@@ -77,14 +80,14 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
     }
   }
 
-  async function deactivate(item: AdminUser) {
-    if (!window.confirm(`Деактивувати адміністратора ${item.username}?`)) return;
+  async function deactivate(item: AdminUser, input: { reason: string; confirmText: string }) {
     try {
-      await deactivateAdminUser(item.id);
-      setSuccess('Адміністратора деактивовано.');
+      await deactivateAdminUser(item.id, input);
+      setSuccess('Адміністратора видалено.');
+      setDeleteTarget(null);
       await load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не вдалося деактивувати адміністратора.');
+      setError(caught instanceof Error ? caught.message : 'Не вдалося видалити адміністратора.');
     }
   }
 
@@ -122,7 +125,7 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
               <td>{isLocked(item) ? <span className="meta-badge warning">{formatDate(item.lockedUntil)}</span> : '—'}</td>
               <td className="row-actions">
                 {!protectedOwner && <button className="small-button" onClick={() => showForm(item)}>Редагувати</button>}
-                {!protectedOwner && item.isActive && <button className="small-button danger-outline" onClick={() => void deactivate(item)}>Деактивувати</button>}
+                {canDelete && !protectedOwner && currentAdmin.id !== item.id && item.isActive && <button className="small-button danger-outline" onClick={() => setDeleteTarget(item)}>Видалити</button>}
                 {currentAdmin.role === 'SYSTEM_OWNER' && !protectedOwner && item.twoFactorEnabled && <button className="small-button danger-outline" onClick={() => void reset2fa(item)}>Скинути 2FA</button>}
                 {protectedOwner && <span className="meta-badge">Захищено</span>}
               </td>
@@ -144,6 +147,7 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
         {error && <p className="message error" role="alert">{error}</p>}
         <div className="modal-actions"><button type="submit">Зберегти</button><button type="button" className="secondary" onClick={() => setOpen(false)}>Скасувати</button></div>
       </form></div>}
+      {deleteTarget && <DeleteConfirmModal title="Видалити адміністратора" description={`Буде приховано адміністратора: ${deleteTarget.username}.`} onCancel={() => setDeleteTarget(null)} onConfirm={(input) => deactivate(deleteTarget, input)} />}
     </section>
   );
 }

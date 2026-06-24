@@ -2,7 +2,7 @@ import { routeSheetStorage } from '../storage/routeSheetStorage';
 import type { FinishShiftInput, RouteSheet, RouteSheetFilters, StartShiftInput } from '../types';
 import { normalizeVehicleNumber } from '../utils/vehicleNumber';
 import { BADGE_NUMBER_ERROR, isValidBadgeNumber } from '../utils/badgeNumber';
-import { ApiError, apiGet, apiPatch, apiPost, isApiUnavailableError } from './apiClient';
+import { ApiError, apiDelete, apiGet, apiPatch, apiPost, isApiUnavailableError } from './apiClient';
 import { addAuditLog } from './auditService';
 import { getOfficerToken } from './officerService';
 import { extractEntity, extractList } from '../utils/apiResponse';
@@ -159,6 +159,10 @@ export async function getRouteSheetById(id: string): Promise<RouteSheet | null> 
     if (!isApiUnavailableError(error)) throw error;
     return routeSheetStorage.getAll().find((item) => item.id === id) ?? null;
   }
+}
+
+export async function deleteRouteSheet(id: string, input: { reason: string; confirmText: string }): Promise<void> {
+  await apiDelete(`/api/route-sheets/${encodeURIComponent(id)}`, input);
 }
 
 export async function getActiveRouteSheetByOfficer(badgeNumber: string): Promise<RouteSheet | null> {

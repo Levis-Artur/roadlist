@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import {
   closeMonthlyRouteSheet,
+  deleteMonthlyRouteSheet,
   getMonthlyRouteSheet,
   getMonthlyRouteSheetPrintData,
   listMonthlyRouteSheets,
@@ -49,4 +50,11 @@ export async function reopenMonthlyRouteSheetController(request: Request, respon
 
 export async function getMonthlyRouteSheetPrintDataController(request: Request, response: Response, next: NextFunction) {
   try { response.json({ success: true, monthlyRouteSheet: await getMonthlyRouteSheetPrintData(request.params.id, request.admin) }); } catch (error) { next(error); }
+}
+
+export async function deleteMonthlyRouteSheetController(request: Request, response: Response, next: NextFunction) {
+  try {
+    await deleteMonthlyRouteSheet(request.params.id, request.body ?? {}, metadata(request), request.admin);
+    response.json({ success: true, message: 'Місячний маршрутний лист видалено' });
+  } catch (error) { next(error); }
 }

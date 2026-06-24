@@ -22,10 +22,10 @@ export async function saveUploadedPhoto(file: Express.Multer.File, type: PhotoTy
 }
 
 export async function getAvailablePhoto(id: string) {
-  const photo = await prisma.odometerPhoto.findFirst({ where: { id, deletedAt: null } });
+  const photo = await prisma.odometerPhoto.findFirst({ where: { id, deletedAt: null, isDeleted: false } });
   if (!photo) return null;
   if (photo.expiresAt.getTime() < Date.now()) {
-    await prisma.odometerPhoto.update({ where: { id }, data: { deletedAt: new Date() } });
+    await prisma.odometerPhoto.update({ where: { id }, data: { deletedAt: new Date(), isDeleted: true } });
     await fs.unlink(photo.filePath).catch(() => undefined);
     return null;
   }
@@ -34,12 +34,12 @@ export async function getAvailablePhoto(id: string) {
 
 export async function getAvailablePhotoWithRouteSheet(id: string) {
   const photo = await prisma.odometerPhoto.findFirst({
-    where: { id, deletedAt: null },
+    where: { id, deletedAt: null, isDeleted: false },
     include: { routeSheet: true },
   });
   if (!photo) return null;
   if (photo.expiresAt.getTime() < Date.now()) {
-    await prisma.odometerPhoto.update({ where: { id }, data: { deletedAt: new Date() } });
+    await prisma.odometerPhoto.update({ where: { id }, data: { deletedAt: new Date(), isDeleted: true } });
     await fs.unlink(photo.filePath).catch(() => undefined);
     return null;
   }

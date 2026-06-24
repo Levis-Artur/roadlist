@@ -57,8 +57,8 @@ export async function updateOfficerController(request: Request, response: Respon
 
 export async function deactivateOfficerController(request: Request, response: Response, next: NextFunction) {
   try {
-    await deactivateOfficer(request.params.id, metadata(request), request.admin);
-    response.json({ success: true, message: 'Патрульного деактивовано' });
+    await deactivateOfficer(request.params.id, request.body ?? {}, metadata(request), request.admin);
+    response.json({ success: true, message: 'Патрульного видалено' });
   } catch (error) { next(error); }
 }
 

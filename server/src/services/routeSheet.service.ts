@@ -6,6 +6,7 @@ import { normalizeVehicleNumber } from '../utils/normalizeVehicleNumber.js';
 import { createAuditLog } from './audit.service.js';
 import { validateBadgeNumber } from '../utils/badgeNumber.js';
 import { assertDepartmentScope } from './organization.service.js';
+import { canIncludeDeleted, deletionAuditMetadata, deletionPayload } from './softDelete.service.js';
 
 function requiredText(value: unknown, message: string): string {
   if (typeof value !== 'string' || !value.trim()) throw new AppError(message, 400);
@@ -97,6 +98,7 @@ async function refreshMonthlyAggregates(tx: Prisma.TransactionClient, monthlyRou
   const entries = await tx.routeSheet.findMany({
     where: {
       monthlyRouteSheetId,
+      isDeleted: false,
       status: { in: ['completed', 'needs_review', 'verified'] },
       distanceKm: { not: null },
     },
@@ -121,12 +123,12 @@ export async function startShift(input: StartShiftInput, metadata: RequestMetada
   const vehicleNumber = normalizeVehicleNumber(requiredText(input.vehicleNumber, 'Вкажіть номер автомобіля.'));
   const startOdometer = nonNegativeInteger(input.startOdometer, 'Кілометраж має бути невід’ємним числом.');
   const startPhotoId = requiredPhotoId(input.startPhotoId);
-  const duplicate = await prisma.routeSheet.findFirst({ where: { badgeNumber, status: 'active' } });
+  const duplicate = await prisma.routeSheet.findFirst({ where: { badgeNumber, status: 'active', isDeleted: false } });
   if (duplicate) {
     await createAuditLog({ action: 'Спроба почати другу активну зміну', entityType: 'route_sheet', entityId: duplicate.id, badgeNumber, ...metadata });
     throw new AppError('У цього патрульного вже є активна зміна.', 409);
   }
-  const busyVehicleShift = await prisma.routeSheet.findFirst({ where: { vehicleNumber, status: 'active' } });
+  const busyVehicleShift = await prisma.routeSheet.findFirst({ where: { vehicleNumber, status: 'active', isDeleted: false } });
   if (busyVehicleShift) {
     await createAuditLog({
       action: 'Перевірка зайнятості авто: старт заблоковано',
@@ -138,9 +140,9 @@ export async function startShift(input: StartShiftInput, metadata: RequestMetada
     });
     throw new AppError('Цей автомобіль вже використовується в активній зміні', 409);
   }
-  const officer = await prisma.officer.findFirst({ where: { badgeNumber, isActive: true } });
+  const officer = await prisma.officer.findFirst({ where: { badgeNumber, isActive: true, isDeleted: false } });
   if (!officer) throw new AppError('Працівника з таким номером жетона не знайдено', 404);
-  const vehicle = await prisma.vehicle.findFirst({ where: { plateNumber: vehicleNumber, isActive: true } });
+  const vehicle = await prisma.vehicle.findFirst({ where: { plateNumber: vehicleNumber, isActive: true, isDeleted: false } });
   if (!vehicle) throw new AppError('Обраний автомобіль неактивний або не знайдений.', 400);
   let routeSheet: RouteSheet;
   try {
@@ -196,7 +198,7 @@ export async function finishShift(input: FinishShiftInput, metadata: RequestMeta
   const endPhotoId = requiredPhotoId(input.endPhotoId);
   const fuel = optionalFuel(input);
   const active = await prisma.routeSheet.findFirst({
-    where: { badgeNumber, vehicleNumber, status: 'active', ...(crewNumber ? { crewNumber } : {}) },
+    where: { badgeNumber, vehicleNumber, status: 'active', isDeleted: false, ...(crewNumber ? { crewNumber } : {}) },
   });
   if (!active) throw new AppError('Активну зміну за вказаними даними не знайдено.', 404);
   if (endOdometer < active.startOdometer) {
@@ -207,7 +209,7 @@ export async function finishShift(input: FinishShiftInput, metadata: RequestMeta
   const routeSheet = await prisma.$transaction(async (tx) => {
     let monthlyRouteSheetId = active.monthlyRouteSheetId;
     if (!monthlyRouteSheetId) {
-      const vehicle = await tx.vehicle.findFirst({ where: { plateNumber: vehicleNumber } });
+      const vehicle = await tx.vehicle.findFirst({ where: { plateNumber: vehicleNumber, isDeleted: false } });
       if (vehicle) {
         const monthlyRouteSheet = await getOrCreateMonthlyRouteSheet(tx, vehicle, active.startedAt, active.startOdometer, metadata);
         monthlyRouteSheetId = monthlyRouteSheet.id;
@@ -257,6 +259,7 @@ function assertDepartmentAccess(actor: AdminTokenPayload | undefined, department
 
 export async function listRouteSheets(filters: RouteSheetFilters, actor?: AdminTokenPayload) {
   const where: Prisma.RouteSheetWhereInput = {};
+  where.isDeleted = canIncludeDeleted(actor, filters.includeDeleted) ? undefined : false;
   if (filters.status) where.status = filters.status;
   if (filters.badgeNumber) where.badgeNumber = filters.badgeNumber.trim();
   if (filters.vehicleNumber) where.vehicleNumber = normalizeVehicleNumber(filters.vehicleNumber);
@@ -285,21 +288,21 @@ export async function listRouteSheets(filters: RouteSheetFilters, actor?: AdminT
 
 export async function listActiveRouteSheetsForOfficer(badgeNumber: string) {
   return prisma.routeSheet.findMany({
-    where: { badgeNumber: validateBadgeNumber(badgeNumber), status: 'active' },
+    where: { badgeNumber: validateBadgeNumber(badgeNumber), status: 'active', isDeleted: false },
     orderBy: { createdAt: 'desc' },
   });
 }
 
 export async function getRouteSheet(id: string, actor?: AdminTokenPayload) {
   const routeSheet = await prisma.routeSheet.findUnique({ where: { id } });
-  if (!routeSheet) throw new AppError('Маршрутний лист не знайдено.', 404);
+  if (!routeSheet || (routeSheet.isDeleted && actor?.role !== 'SYSTEM_OWNER')) throw new AppError('Маршрутний лист не знайдено.', 404);
   assertDepartmentScope(actor, routeSheet);
   return routeSheet;
 }
 
 export async function verifyRouteSheet(id: string, comment?: unknown, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const routeSheet = await prisma.routeSheet.findUnique({ where: { id } });
-  if (!routeSheet) throw new AppError('Маршрутний лист не знайдено.', 404);
+  if (!routeSheet || routeSheet.isDeleted) throw new AppError('Маршрутний лист не знайдено.', 404);
   assertDepartmentScope(actor, routeSheet);
   if (routeSheet.status === 'active') throw new AppError('Неможливо перевірити активну незавершену зміну.', 400);
   const updated = await prisma.$transaction(async (tx) => {
@@ -328,7 +331,7 @@ export async function verifyRouteSheet(id: string, comment?: unknown, metadata: 
 
 export async function markRouteSheetNeedsReview(id: string, comment?: unknown, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const routeSheet = await prisma.routeSheet.findUnique({ where: { id } });
-  if (!routeSheet) throw new AppError('Маршрутний лист не знайдено.', 404);
+  if (!routeSheet || routeSheet.isDeleted) throw new AppError('Маршрутний лист не знайдено.', 404);
   assertDepartmentScope(actor, routeSheet);
   if (!['completed', 'verified', 'needs_review'].includes(routeSheet.status)) {
     throw new AppError('Повернути на перевірку можна тільки завершену, перевірену або вже проблемну зміну.', 400);
@@ -357,7 +360,7 @@ export async function markRouteSheetNeedsReview(id: string, comment?: unknown, m
 
 export async function updateRouteSheetAdminComment(id: string, comment?: unknown, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const routeSheet = await prisma.routeSheet.findUnique({ where: { id } });
-  if (!routeSheet) throw new AppError('Маршрутний лист не знайдено.', 404);
+  if (!routeSheet || routeSheet.isDeleted) throw new AppError('Маршрутний лист не знайдено.', 404);
   assertDepartmentScope(actor, routeSheet);
   const updated = await prisma.routeSheet.update({
     where: { id },
@@ -374,4 +377,30 @@ export async function updateRouteSheetAdminComment(id: string, comment?: unknown
     ...metadata,
   });
   return updated;
+}
+
+export async function deleteRouteSheet(id: string, input: Record<string, unknown>, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
+  const data = deletionPayload(input, actor);
+  const routeSheet = await prisma.routeSheet.findFirst({ where: { id, isDeleted: false } });
+  if (!routeSheet) throw new AppError('Маршрутний лист не знайдено.', 404);
+  assertDepartmentScope(actor, routeSheet);
+  const updated = await prisma.$transaction(async (tx) => {
+    const item = await tx.routeSheet.update({
+      where: { id },
+      data,
+    });
+    if (item.monthlyRouteSheetId) await refreshMonthlyAggregates(tx, item.monthlyRouteSheetId);
+    return item;
+  });
+  await createAuditLog({
+    action: 'Маршрутний лист видалено',
+    entityType: 'route_sheet',
+    entityId: id,
+    badgeNumber: updated.badgeNumber,
+    details: `${updated.fullName}; причина: ${data.deleteReason}`,
+    targetDepartment: updated.departmentName ?? updated.department,
+    targetDepartmentId: updated.departmentId,
+    targetUnit: updated.departmentUnitName ?? updated.unit,
+    ...deletionAuditMetadata(actor, metadata),
+  });
 }

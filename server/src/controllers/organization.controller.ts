@@ -2,6 +2,8 @@ import type { NextFunction, Request, Response } from 'express';
 import {
   createDepartment,
   createDepartmentUnit,
+  deleteDepartment,
+  deleteDepartmentUnit,
   listDepartments,
   listDepartmentUnits,
   updateDepartment,
@@ -22,7 +24,7 @@ function metadata(request: Request) {
 }
 
 export async function listDepartmentsController(request: Request, response: Response, next: NextFunction) {
-  try { response.json({ success: true, departments: await listDepartments(request.admin) }); } catch (error) { next(error); }
+  try { response.json({ success: true, departments: await listDepartments(request.admin, request.query) }); } catch (error) { next(error); }
 }
 
 export async function createDepartmentController(request: Request, response: Response, next: NextFunction) {
@@ -31,6 +33,13 @@ export async function createDepartmentController(request: Request, response: Res
 
 export async function updateDepartmentController(request: Request, response: Response, next: NextFunction) {
   try { response.json({ success: true, department: await updateDepartment(request.params.id, request.body ?? {}, metadata(request), request.admin) }); } catch (error) { next(error); }
+}
+
+export async function deleteDepartmentController(request: Request, response: Response, next: NextFunction) {
+  try {
+    await deleteDepartment(request.params.id, request.body ?? {}, metadata(request), request.admin);
+    response.json({ success: true, message: 'Управління видалено' });
+  } catch (error) { next(error); }
 }
 
 export async function listDepartmentUnitsController(request: Request, response: Response, next: NextFunction) {
@@ -43,4 +52,11 @@ export async function createDepartmentUnitController(request: Request, response:
 
 export async function updateDepartmentUnitController(request: Request, response: Response, next: NextFunction) {
   try { response.json({ success: true, departmentUnit: await updateDepartmentUnit(request.params.id, request.body ?? {}, metadata(request), request.admin) }); } catch (error) { next(error); }
+}
+
+export async function deleteDepartmentUnitController(request: Request, response: Response, next: NextFunction) {
+  try {
+    await deleteDepartmentUnit(request.params.id, request.body ?? {}, metadata(request), request.admin);
+    response.json({ success: true, message: 'Внутрішній підрозділ видалено' });
+  } catch (error) { next(error); }
 }

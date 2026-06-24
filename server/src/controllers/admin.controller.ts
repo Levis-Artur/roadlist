@@ -109,7 +109,7 @@ export async function resetAdminTwoFactorController(request: Request, response: 
 
 export async function deactivateAdminUserController(request: Request, response: Response, next: NextFunction) {
   try {
-    await deactivateAdminUser(request.admin!, request.params.id, metadata(request));
-    response.json({ success: true, message: 'Адміністратора деактивовано' });
+    await deactivateAdminUser(request.admin!, request.params.id, request.body ?? {}, metadata(request));
+    response.json({ success: true, message: 'Адміністратора видалено' });
   } catch (error) { next(error); }
 }

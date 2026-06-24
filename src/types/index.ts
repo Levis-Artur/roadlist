@@ -9,6 +9,11 @@ export interface Officer {
   departmentUnitId?: string | null;
   departmentUnitName?: string | null;
   isActive?: boolean;
+  isDeleted?: boolean;
+  deletedAt?: string | null;
+  deletedByAdminId?: string | null;
+  deletedByUsername?: string | null;
+  deleteReason?: string | null;
   hasPin?: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -31,6 +36,11 @@ export interface AdminUser {
   departmentId?: string | null;
   departmentName?: string | null;
   isActive: boolean;
+  isDeleted?: boolean;
+  deletedAt?: string | null;
+  deletedByAdminId?: string | null;
+  deletedByUsername?: string | null;
+  deleteReason?: string | null;
   mustChangePassword?: boolean;
   passwordChangedAt?: string | null;
   failedLoginAttempts?: number;
@@ -67,6 +77,11 @@ export interface Vehicle {
   departmentUnitId?: string | null;
   departmentUnitName?: string | null;
   isActive: boolean;
+  isDeleted?: boolean;
+  deletedAt?: string | null;
+  deletedByAdminId?: string | null;
+  deletedByUsername?: string | null;
+  deleteReason?: string | null;
   availability?: VehicleAvailability;
   createdAt?: string;
   updatedAt?: string;
@@ -141,6 +156,11 @@ export interface RouteSheet {
   adminVerifiedBy?: string | null;
   adminReviewComment?: string | null;
   status: RouteSheetStatus;
+  isDeleted?: boolean;
+  deletedAt?: string | null;
+  deletedByAdminId?: string | null;
+  deletedByUsername?: string | null;
+  deleteReason?: string | null;
   startedAt: string;
   endedAt?: string;
   createdAt: string;
@@ -194,6 +214,11 @@ export interface MonthlyRouteSheet {
   year: number;
   month: number;
   status: MonthlyRouteSheetStatus;
+  isDeleted?: boolean;
+  deletedAt?: string | null;
+  deletedByAdminId?: string | null;
+  deletedByUsername?: string | null;
+  deleteReason?: string | null;
   openingOdometer?: number | null;
   closingOdometer?: number | null;
   totalDistanceKm: number;
@@ -223,7 +248,7 @@ export interface MonthlyRouteSheetFilters {
 export interface AuditLog {
   id: string;
   action: string;
-  entityType: 'route_sheet' | 'photo' | 'admin' | 'officer' | 'vehicle';
+  entityType: string;
   entityId?: string;
   badgeNumber?: string;
   details?: string;
@@ -242,6 +267,11 @@ export interface Department {
   code?: string | null;
   region?: string | null;
   isActive: boolean;
+  isDeleted?: boolean;
+  deletedAt?: string | null;
+  deletedByAdminId?: string | null;
+  deletedByUsername?: string | null;
+  deleteReason?: string | null;
   unitCount?: number;
   vehicleCount?: number;
   officerCount?: number;
@@ -258,6 +288,11 @@ export interface DepartmentUnit {
   code?: string | null;
   description?: string | null;
   isActive: boolean;
+  isDeleted?: boolean;
+  deletedAt?: string | null;
+  deletedByAdminId?: string | null;
+  deletedByUsername?: string | null;
+  deleteReason?: string | null;
   department?: Department;
   createdAt?: string;
   updatedAt?: string;

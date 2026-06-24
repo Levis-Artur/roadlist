@@ -13,6 +13,11 @@ model Department {
   code      String?  @unique
   region    String?
   isActive  Boolean  @default(true)
+  isDeleted Boolean  @default(false)
+  deletedAt DateTime?
+  deletedByAdminId String?
+  deletedByUsername String?
+  deleteReason String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   units     DepartmentUnit[]
@@ -29,6 +34,11 @@ model DepartmentUnit {
   code         String?
   description  String?
   isActive     Boolean    @default(true)
+  isDeleted    Boolean    @default(false)
+  deletedAt    DateTime?
+  deletedByAdminId String?
+  deletedByUsername String?
+  deleteReason String?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   department   Department @relation(fields: [departmentId], references: [id])
@@ -49,6 +59,11 @@ model Officer {
   departmentUnitName String?
   pinHash     String?
   isActive    Boolean  @default(true)
+  isDeleted   Boolean  @default(false)
+  deletedAt   DateTime?
+  deletedByAdminId String?
+  deletedByUsername String?
+  deleteReason String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -69,6 +84,11 @@ model Vehicle {
   departmentUnitId   String?
   departmentUnitName String?
   isActive           Boolean  @default(true)
+  isDeleted          Boolean  @default(false)
+  deletedAt          DateTime?
+  deletedByAdminId   String?
+  deletedByUsername  String?
+  deleteReason       String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   monthlyRouteSheets VehicleMonthlyRouteSheet[]
@@ -134,6 +154,11 @@ model VehicleMonthlyRouteSheet {
   archivedAt           DateTime?
   adminCheckedBy       String?
   adminComment         String?
+  isDeleted            Boolean      @default(false)
+  deletedAt            DateTime?
+  deletedByAdminId     String?
+  deletedByUsername    String?
+  deleteReason         String?
   createdAt            DateTime     @default(now())
   updatedAt            DateTime     @updatedAt
   vehicle              Vehicle      @relation(fields: [vehicleId], references: [id])
@@ -177,6 +202,11 @@ model RouteSheet {
   adminVerifiedAt      DateTime?
   adminVerifiedBy      String?
   adminReviewComment   String?
+  isDeleted            Boolean                   @default(false)
+  deletedAt            DateTime?
+  deletedByAdminId     String?
+  deletedByUsername    String?
+  deleteReason         String?
   status               String
   startedAt            DateTime
   endedAt              DateTime?
@@ -204,6 +234,10 @@ model OdometerPhoto {
   createdAt    DateTime    @default(now())
   expiresAt    DateTime
   deletedAt    DateTime?
+  isDeleted    Boolean     @default(false)
+  deletedByAdminId String?
+  deletedByUsername String?
+  deleteReason String?
 
   @@index([routeSheetId])
   @@index([expiresAt, deletedAt])
@@ -220,6 +254,11 @@ model AdminUser {
   departmentName      String?
   passwordHash        String
   isActive            Boolean   @default(true)
+  isDeleted           Boolean   @default(false)
+  deletedAt           DateTime?
+  deletedByAdminId    String?
+  deletedByUsername   String?
+  deleteReason        String?
   mustChangePassword  Boolean   @default(false)
   passwordChangedAt   DateTime?
   failedLoginAttempts Int       @default(0)

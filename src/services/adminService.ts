@@ -85,6 +85,10 @@ export function canManageAdminUsers(admin: AdminUser | null): boolean {
   return admin?.role === 'SYSTEM_OWNER' || admin?.role === 'NATIONAL_ADMIN';
 }
 
+export function canDeleteRecords(admin: AdminUser | null): boolean {
+  return admin?.role === 'SYSTEM_OWNER';
+}
+
 export async function getAdminUsers(): Promise<AdminUser[]> {
   const response = await apiGet<AdminListResponse>('/api/admin/users');
   return response.admins;
@@ -179,6 +183,6 @@ export async function resetAdminTwoFactor(id: string): Promise<AdminUser> {
   return (await apiPost<AdminResponse>(`/api/admin/users/${encodeURIComponent(id)}/2fa/reset`)).admin;
 }
 
-export async function deactivateAdminUser(id: string): Promise<void> {
-  await apiDelete(`/api/admin/users/${encodeURIComponent(id)}`);
+export async function deactivateAdminUser(id: string, input: { reason: string; confirmText: string }): Promise<void> {
+  await apiDelete(`/api/admin/users/${encodeURIComponent(id)}`, input);
 }

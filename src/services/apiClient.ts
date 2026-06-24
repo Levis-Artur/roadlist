@@ -99,8 +99,12 @@ export function apiPatch<T>(path: string, body: unknown): Promise<T> {
   });
 }
 
-export function apiDelete(path: string): Promise<void> {
-  return request<void>(path, { method: 'DELETE' });
+export function apiDelete(path: string, body?: unknown): Promise<void> {
+  return request<void>(path, {
+    method: 'DELETE',
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
 }
 
 export function apiUpload<T>(path: string, formData: FormData): Promise<T> {

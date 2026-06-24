@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
-import { finishShift, getRouteSheet, listActiveRouteSheetsForOfficer, listRouteSheets, markRouteSheetNeedsReview, startShift, updateRouteSheetAdminComment, verifyRouteSheet } from '../services/routeSheet.service.js';
+import { deleteRouteSheet, finishShift, getRouteSheet, listActiveRouteSheetsForOfficer, listRouteSheets, markRouteSheetNeedsReview, startShift, updateRouteSheetAdminComment, verifyRouteSheet } from '../services/routeSheet.service.js';
 import type { FinishShiftInput, RouteSheetFilters, StartShiftInput } from '../types/index.js';
 
 function metadata(request: Request) {
@@ -82,6 +82,15 @@ export async function markRouteSheetNeedsReviewController(request: Request, resp
 export async function updateRouteSheetAdminCommentController(request: Request, response: Response, next: NextFunction) {
   try {
     response.json({ success: true, routeSheet: await updateRouteSheetAdminComment(request.params.id, request.body?.comment, metadata(request), request.admin) });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function deleteRouteSheetController(request: Request, response: Response, next: NextFunction) {
+  try {
+    await deleteRouteSheet(request.params.id, request.body ?? {}, metadata(request), request.admin);
+    response.json({ success: true, message: 'Маршрутний лист видалено' });
   } catch (error) {
     next(error);
   }

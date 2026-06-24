@@ -116,8 +116,8 @@ export async function updateVehicle(id: string, input: UpdateVehicleInput): Prom
     return updated;
   }
 }
-export async function deactivateVehicle(id: string): Promise<void> {
-  try { await apiDelete(`/api/vehicles/${id}`); }
+export async function deactivateVehicle(id: string, input: { reason?: string; confirmText?: string } = {}): Promise<void> {
+  try { await apiDelete(`/api/vehicles/${id}`, input.reason ? input : undefined); }
   catch (error) {
     if (!isApiUnavailableError(error)) throw error;
     const vehicles = localVehicles().map((item) => item.id === id ? { ...item, isActive: false, updatedAt: new Date().toISOString() } : item);

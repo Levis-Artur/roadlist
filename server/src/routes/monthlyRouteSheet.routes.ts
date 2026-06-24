@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   closeMonthlyRouteSheetController,
+  deleteMonthlyRouteSheetController,
   getMonthlyRouteSheetController,
   getMonthlyRouteSheetPrintDataController,
   listMonthlyRouteSheetsController,
@@ -17,3 +18,4 @@ monthlyRouteSheetRouter.get('/:id', authAdmin, getMonthlyRouteSheetController);
 monthlyRouteSheetRouter.post('/:id/close', authAdmin, closeMonthlyRouteSheetController);
 monthlyRouteSheetRouter.post('/:id/reopen', authAdmin, reopenMonthlyRouteSheetController);
 monthlyRouteSheetRouter.post('/:id/mark-printed', authAdmin, markMonthlyRouteSheetPrintedController);
+monthlyRouteSheetRouter.delete('/:id', authAdmin, deleteMonthlyRouteSheetController);

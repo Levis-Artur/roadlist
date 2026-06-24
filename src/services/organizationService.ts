@@ -2,7 +2,7 @@ import { DEPARTMENTS } from '../constants/departments';
 import type { Department, DepartmentUnit } from '../types';
 import { extractEntity, extractList } from '../utils/apiResponse';
 import { generateId } from '../utils/generateId';
-import { apiGet, apiPatch, apiPost, isApiUnavailableError } from './apiClient';
+import { apiDelete, apiGet, apiPatch, apiPost, isApiUnavailableError } from './apiClient';
 
 interface DepartmentsResponse { success: boolean; departments: Department[] }
 interface DepartmentResponse { success: boolean; department: Department }
@@ -55,6 +55,10 @@ export async function updateDepartment(id: string, input: Partial<{ name: string
   return department;
 }
 
+export async function deleteDepartment(id: string, input: { reason: string; confirmText: string }): Promise<void> {
+  await apiDelete(`/api/departments/${encodeURIComponent(id)}`, input);
+}
+
 export async function getDepartmentUnits(filters: { departmentId?: string; isActive?: boolean } = {}): Promise<DepartmentUnit[]> {
   try {
     return extractList<DepartmentUnit>(await apiGet<DepartmentUnitsResponse>(`/api/department-units${queryString(filters)}`), 'departmentUnits');
@@ -79,4 +83,8 @@ export async function updateDepartmentUnit(id: string, input: Partial<{ name: st
   const unit = extractEntity<DepartmentUnit>(await apiPatch<DepartmentUnitResponse>(`/api/department-units/${encodeURIComponent(id)}`, input), 'departmentUnit');
   if (!unit) throw new Error('Не вдалося оновити внутрішній підрозділ.');
   return unit;
+}
+
+export async function deleteDepartmentUnit(id: string, input: { reason: string; confirmText: string }): Promise<void> {
+  await apiDelete(`/api/department-units/${encodeURIComponent(id)}`, input);
 }

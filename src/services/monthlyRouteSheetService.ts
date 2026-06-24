@@ -1,7 +1,7 @@
 import { routeSheetStorage } from '../storage/routeSheetStorage';
 import type { MonthlyRouteSheet, MonthlyRouteSheetFilters, RouteSheet } from '../types';
 import { extractEntity, extractList } from '../utils/apiResponse';
-import { apiGet, apiPost, isApiUnavailableError } from './apiClient';
+import { apiDelete, apiGet, apiPost, isApiUnavailableError } from './apiClient';
 
 interface MonthlyRouteSheetResponse {
   success: boolean;
@@ -133,4 +133,8 @@ export async function getMonthlyRouteSheetPrintData(id: string): Promise<Monthly
     if (!isApiUnavailableError(error)) throw error;
     return getMonthlyRouteSheetById(id);
   }
+}
+
+export async function deleteMonthlyRouteSheet(id: string, input: { reason: string; confirmText: string }): Promise<void> {
+  await apiDelete(`/api/monthly-route-sheets/${encodeURIComponent(id)}`, input);
 }

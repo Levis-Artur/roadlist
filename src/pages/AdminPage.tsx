@@ -3,14 +3,15 @@ import { OfficerDirectory } from '../components/OfficerDirectory';
 import { VehicleDirectory } from '../components/VehicleDirectory';
 import { AdminUsersDirectory } from '../components/AdminUsersDirectory';
 import { DepartmentDirectory } from '../components/DepartmentDirectory';
-import { DepartmentUnitDirectory } from '../components/DepartmentUnitDirectory';
+import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
 import { addAuditLog, clearAuditLogs, getAuditLogs } from '../services/auditService';
 import { clearOdometerPhotos, getOdometerPhoto } from '../services/photoService';
-import { clearRouteSheets, getRouteSheetById, getRouteSheets, markRouteSheetNeedsReview, updateRouteSheetAdminComment, verifyRouteSheet } from '../services/routeSheetService';
+import { clearRouteSheets, deleteRouteSheet, getRouteSheetById, getRouteSheets, markRouteSheetNeedsReview, updateRouteSheetAdminComment, verifyRouteSheet } from '../services/routeSheetService';
 import { getOfficers } from '../services/officerService';
 import { getVehicles } from '../services/vehicleService';
 import {
   closeMonthlyRouteSheet,
+  deleteMonthlyRouteSheet,
   getMonthlyRouteSheetById,
   getMonthlyRouteSheetPrintData,
   getMonthlyRouteSheets,
@@ -20,7 +21,7 @@ import {
 import type { AuditLog, MonthlyRouteSheet, Officer, RouteSheet, RouteSheetStatus, Vehicle } from '../types';
 import type { AdminUser } from '../types';
 import { findVehicleByNumber, formatVehicleLabel } from '../utils/vehicleDisplay';
-import { adminRoleLabels, canManageAdminUsers, changeOwnPassword, getMyAdminProfile } from '../services/adminService';
+import { adminRoleLabels, canDeleteRecords, canManageAdminUsers, changeOwnPassword, getMyAdminProfile } from '../services/adminService';
 
 const statusLabels: Record<RouteSheetStatus, string> = {
   active: 'Активна',
@@ -124,11 +125,12 @@ function StoredPhoto({ photoId, alt }: { photoId?: string; alt: string }) {
   return <div className="no-photo">{photoId ? 'Фото недоступне або було видалене.' : 'Фото відсутнє'}</div>;
 }
 
-type AdminSection = 'route_sheets' | 'monthly_route_sheets' | 'departments' | 'department_units' | 'officers' | 'vehicles' | 'audit' | 'admins' | 'profile';
+type AdminSection = 'route_sheets' | 'monthly_route_sheets' | 'departments' | 'officers' | 'vehicles' | 'audit' | 'admins' | 'profile';
 
 export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () => void }) {
   const [section, setSection] = useState<AdminSection>('route_sheets');
   const canManageAdmins = canManageAdminUsers(admin);
+  const canDelete = canDeleteRecords(admin);
   const canManageDepartments = admin.role === 'SYSTEM_OWNER' || admin.role === 'NATIONAL_ADMIN';
   const [routeSheets, setRouteSheets] = useState<RouteSheet[]>([]);
   const [monthlyRouteSheets, setMonthlyRouteSheets] = useState<MonthlyRouteSheet[]>([]);
@@ -152,6 +154,7 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
   const [myProfile, setMyProfile] = useState<AdminUser>(admin);
   const [profilePasswordForm, setProfilePasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [profileMessage, setProfileMessage] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'route' | 'monthly'; id: string; label: string } | null>(null);
 
   async function refreshData() {
     setLoading(true);
@@ -361,6 +364,21 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
     }
   }
 
+  async function confirmDelete(input: { reason: string; confirmText: string }) {
+    if (!deleteTarget) return;
+    if (deleteTarget.type === 'route') {
+      await deleteRouteSheet(deleteTarget.id, input);
+      setRouteSheets((items) => items.filter((item) => item.id !== deleteTarget.id));
+      if (selected?.id === deleteTarget.id) setSelected(undefined);
+    } else {
+      await deleteMonthlyRouteSheet(deleteTarget.id, input);
+      setMonthlyRouteSheets((items) => items.filter((item) => item.id !== deleteTarget.id));
+      if (selectedMonthly?.id === deleteTarget.id) setSelectedMonthly(undefined);
+      if (printMonthly?.id === deleteTarget.id) setPrintMonthly(undefined);
+    }
+    await refreshData();
+  }
+
   async function submitProfilePassword(event: React.FormEvent) {
     event.preventDefault();
     setAdminError('');
@@ -397,7 +415,6 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
         <button className={section === 'route_sheets' ? 'active' : ''} onClick={() => setSection('route_sheets')}>Зміни</button>
         <button className={section === 'monthly_route_sheets' ? 'active' : ''} onClick={() => setSection('monthly_route_sheets')}>Маршрутні листи авто</button>
         {canManageDepartments && <button className={section === 'departments' ? 'active' : ''} onClick={() => setSection('departments')}>Управління</button>}
-        <button className={section === 'department_units' ? 'active' : ''} onClick={() => setSection('department_units')}>Внутрішні підрозділи</button>
         <button className={section === 'officers' ? 'active' : ''} onClick={() => setSection('officers')}>Користувачі</button>
         <button className={section === 'vehicles' ? 'active' : ''} onClick={() => setSection('vehicles')}>Автомобілі</button>
         {canManageAdmins && <button className={section === 'admins' ? 'active' : ''} onClick={() => setSection('admins')}>Адміністратори</button>}
@@ -410,7 +427,6 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
       {adminError && <p className="message error" role="alert">{adminError}</p>}
 
       {section === 'departments' && canManageDepartments && <DepartmentDirectory currentAdmin={admin} />}
-      {section === 'department_units' && <DepartmentUnitDirectory currentAdmin={admin} />}
       {section === 'officers' && <OfficerDirectory currentAdmin={admin} />}
       {section === 'vehicles' && <VehicleDirectory currentAdmin={admin} />}
       {section === 'admins' && canManageAdmins && <AdminUsersDirectory currentAdmin={admin} />}
@@ -494,7 +510,10 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
                   <td><span className={`status ${item.status}`}>{statusLabels[item.status]}</span></td>
                   <td><span className={`meta-badge ${item.startManualEntry || item.endManualEntry ? 'manual' : ''}`}>{item.startManualEntry || item.endManualEntry ? 'Так' : 'Ні'}</span></td><td>{item.status === 'needs_review' ? 'Так' : 'Ні'}</td>
                   <td>{formatDate(item.startedAt)}</td><td>{formatDate(item.endedAt)}</td>
-                  <td><button type="button" className="small-button" onClick={() => void openDetails(item.id)}>{item.status === 'needs_review' ? 'Перевірити' : 'Деталі'}</button></td>
+                  <td className="row-actions">
+                    <button type="button" className="small-button" onClick={() => void openDetails(item.id)}>{item.status === 'needs_review' ? 'Перевірити' : 'Деталі'}</button>
+                    {canDelete && <button type="button" className="small-button danger-outline" onClick={() => setDeleteTarget({ type: 'route', id: item.id, label: item.fullName })}>Видалити</button>}
+                  </td>
                 </tr>
               ))}</tbody>
             </table>
@@ -540,6 +559,7 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
                       ) : (
                         <button type="button" className="small-button danger-mini" disabled={item.status !== 'open'} onClick={() => void closeMonth(item.id)}>Закрити місяць</button>
                       )}
+                      {canDelete && <button type="button" className="small-button danger-outline" onClick={() => setDeleteTarget({ type: 'monthly', id: item.id, label: `${item.vehicleBrand} ${item.vehicleModel} ${item.displayVehicleNumber || item.vehicleNumber}` })}>Видалити</button>}
                     </div>
                   </td>
                 </tr>
@@ -748,6 +768,14 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
             </article>
           </section>
         </div>
+      )}
+      {deleteTarget && (
+        <DeleteConfirmModal
+          title={deleteTarget.type === 'route' ? 'Видалити маршрутний лист' : 'Видалити місячний маршрутний лист'}
+          description={`Буде приховано запис: ${deleteTarget.label}. Дія доступна тільки власнику системи.`}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={confirmDelete}
+        />
       )}
     </main>
   );

@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { DEPARTMENTS } from '../constants/departments';
 import { createVehicle, deactivateVehicle, getVehicleTransferHistory, getVehicles, transferVehicle, updateVehicle } from '../services/vehicleService';
 import { getDepartments, getDepartmentUnits } from '../services/organizationService';
+import { canDeleteRecords } from '../services/adminService';
 import type { AdminUser, CreateVehicleInput, Department, DepartmentUnit, Vehicle, VehicleTransferHistory } from '../types';
 import { normalizeVehicleNumber } from '../utils/vehicleNumber';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 
 function defaultForm(currentAdmin: AdminUser): CreateVehicleInput {
   return {
@@ -56,6 +58,7 @@ function formatTransfer(item: VehicleTransferHistory) {
 export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) {
   const isRegional = currentAdmin.role === 'REGIONAL_ADMIN';
   const canTransfer = currentAdmin.role === 'SYSTEM_OWNER' || currentAdmin.role === 'NATIONAL_ADMIN' || currentAdmin.role === 'REGIONAL_ADMIN';
+  const canDelete = canDeleteRecords(currentAdmin);
   const [items, setItems] = useState<Vehicle[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [departmentUnits, setDepartmentUnits] = useState<DepartmentUnit[]>([]);
@@ -72,6 +75,7 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
   const [transferForm, setTransferForm] = useState<{ newDepartmentId: string; newDepartment: string; newDepartmentUnitId: string; newUnit: string; comment: string }>({ newDepartmentId: '', newDepartment: DEPARTMENTS[0], newDepartmentUnitId: '', newUnit: '', comment: '' });
   const [historyTarget, setHistoryTarget] = useState<Vehicle>();
   const [history, setHistory] = useState<VehicleTransferHistory[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<Vehicle | null>(null);
 
   async function load() {
     setLoading(true);
@@ -173,13 +177,13 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
     }
   }
 
-  async function deactivate(item: Vehicle) {
-    if (!window.confirm(`Деактивувати ${item.brand} ${item.model} — ${item.displayPlateNumber ?? item.plateNumber}?`)) return;
+  async function deactivate(item: Vehicle, input: { reason: string; confirmText: string }) {
     try {
-      await deactivateVehicle(item.id);
+      await deactivateVehicle(item.id, input);
       await load();
+      setDeleteTarget(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не вдалося деактивувати автомобіль.');
+      setError(caught instanceof Error ? caught.message : 'Не вдалося видалити автомобіль.');
     }
   }
 
@@ -238,7 +242,7 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
 
     {error && <p className="message error" role="alert">{error}</p>}
 
-    {loading ? <div className="empty-state compact-empty">Завантаження…</div> : !items.length ? <div className="empty-state compact-empty"><p>Автомобілів ще не додано.</p></div> : !filtered.length ? <div className="empty-state compact-empty"><p>Автомобілів за вибраними фільтрами не знайдено.</p></div> : <div className="table-card"><div className="table-scroll"><table><thead><tr><th>Номерний знак</th><th>Нормалізований номер</th><th>Марка</th><th>Модель</th><th>УПП</th><th>Підрозділ</th><th>Активний</th><th>Дата створення</th><th>Дії</th></tr></thead><tbody>{filtered.map((item) => <tr key={item.id}><td>{item.displayPlateNumber ?? item.plateNumber}</td><td>{item.plateNumber}</td><td>{item.brand}</td><td>{item.model}</td><td>{item.department}</td><td>{item.unit || '—'}</td><td><span className={`status ${item.isActive ? 'completed' : 'needs_review'}`}>{item.isActive ? 'Так' : 'Ні'}</span></td><td>{item.createdAt ? new Date(item.createdAt).toLocaleString('uk-UA') : '—'}</td><td className="row-actions"><button className="small-button" onClick={() => showForm(item)}>Редагувати</button>{canTransfer && <button className="small-button" onClick={() => openTransfer(item)}>Перемістити</button>}<button className="small-button secondary" onClick={() => void showHistory(item)}>Історія</button>{item.isActive && <button className="small-button danger-outline" onClick={() => void deactivate(item)}>Деактивувати</button>}</td></tr>)}</tbody></table></div></div>}
+    {loading ? <div className="empty-state compact-empty">Завантаження…</div> : !items.length ? <div className="empty-state compact-empty"><p>Автомобілів ще не додано.</p></div> : !filtered.length ? <div className="empty-state compact-empty"><p>Автомобілів за вибраними фільтрами не знайдено.</p></div> : <div className="table-card"><div className="table-scroll"><table><thead><tr><th>Номерний знак</th><th>Нормалізований номер</th><th>Марка</th><th>Модель</th><th>УПП</th><th>Підрозділ</th><th>Активний</th><th>Дата створення</th><th>Дії</th></tr></thead><tbody>{filtered.map((item) => <tr key={item.id}><td>{item.displayPlateNumber ?? item.plateNumber}</td><td>{item.plateNumber}</td><td>{item.brand}</td><td>{item.model}</td><td>{item.department}</td><td>{item.unit || '—'}</td><td><span className={`status ${item.isActive ? 'completed' : 'needs_review'}`}>{item.isActive ? 'Так' : 'Ні'}</span></td><td>{item.createdAt ? new Date(item.createdAt).toLocaleString('uk-UA') : '—'}</td><td className="row-actions"><button className="small-button" onClick={() => showForm(item)}>Редагувати</button>{canTransfer && <button className="small-button" onClick={() => openTransfer(item)}>Перемістити</button>}<button className="small-button secondary" onClick={() => void showHistory(item)}>Історія</button>{canDelete && item.isActive && <button className="small-button danger-outline" onClick={() => setDeleteTarget(item)}>Видалити</button>}</td></tr>)}</tbody></table></div></div>}
 
     {open && <div className="modal-backdrop" onMouseDown={() => setOpen(false)}><form className="modal directory-modal" onSubmit={save} onMouseDown={(event) => event.stopPropagation()}>
       <div className="section-heading"><h2>{editing ? 'Редагування автомобіля' : 'Новий автомобіль'}</h2><button type="button" className="text-button" onClick={() => setOpen(false)}>Закрити</button></div>
@@ -272,5 +276,6 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
       <p className="muted">{historyTarget.brand} {historyTarget.model} — {historyTarget.displayPlateNumber ?? historyTarget.plateNumber}</p>
       {!history.length ? <div className="empty-state compact-empty"><p>Переміщень ще не зафіксовано.</p></div> : <div className="table-scroll"><table><thead><tr><th>Дата</th><th>Переміщення</th><th>Адміністратор</th><th>Коментар</th></tr></thead><tbody>{history.map((item) => <tr key={item.id}><td>{new Date(item.transferredAt).toLocaleString('uk-UA')}</td><td>{formatTransfer(item)}</td><td>{item.transferredByUsername || '—'}</td><td>{item.comment || '—'}</td></tr>)}</tbody></table></div>}
     </div></div>}
+    {deleteTarget && <DeleteConfirmModal title="Видалити автомобіль" description={`Буде приховано автомобіль: ${deleteTarget.brand} ${deleteTarget.model} — ${deleteTarget.displayPlateNumber ?? deleteTarget.plateNumber}.`} onCancel={() => setDeleteTarget(null)} onConfirm={(input) => deactivate(deleteTarget, input)} />}
   </section>;
 }

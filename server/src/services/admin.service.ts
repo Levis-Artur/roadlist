@@ -9,6 +9,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import type { AdminRole, AdminTokenPayload, AdminTwoFactorPendingPayload, RequestMetadata } from '../types/index.js';
 import { createAuditLog } from './audit.service.js';
 import { resolveDepartmentAssignment } from './organization.service.js';
+import { deletionPayload } from './softDelete.service.js';
 
 const ADMIN_ROLES: AdminRole[] = ['SYSTEM_OWNER', 'NATIONAL_ADMIN', 'REGIONAL_ADMIN'];
 const OWNER_LOCK_MESSAGE = 'Неможливо змінити системного власника через адміністративну панель';
@@ -131,7 +132,7 @@ export async function verifyAdminToken(tokenValue: unknown): Promise<AdminTokenP
   if (!payload.adminId || !payload.username || !isAdminRole(payload.role)) {
     throw new AppError('Потрібна авторизація адміністратора', 401);
   }
-  const admin = await prisma.adminUser.findFirst({ where: { id: payload.adminId, isActive: true } });
+  const admin = await prisma.adminUser.findFirst({ where: { id: payload.adminId, isActive: true, isDeleted: false } });
   if (!admin || admin.username !== payload.username || !isAdminRole(admin.role)) {
     throw new AppError('Потрібна авторизація адміністратора', 401);
   }
@@ -155,7 +156,7 @@ export async function loginAdmin(usernameValue: unknown, passwordValue: unknown,
   checkIpRateLimit(metadata.ipAddress);
   const username = required(usernameValue, 'Логін адміністратора обов’язковий.');
   const password = required(passwordValue, 'Пароль адміністратора обов’язковий.');
-  const admin = await prisma.adminUser.findUnique({ where: { username } });
+  const admin = await prisma.adminUser.findFirst({ where: { username, isDeleted: false } });
   if (!admin) {
     await auditLoginFailure(username, metadata);
     throw new AppError('Невірний логін або пароль', 401);
@@ -381,7 +382,7 @@ export async function logoutAdmin(actor: AdminTokenPayload, metadata: RequestMet
 }
 
 export async function listAdminUsers(actor: AdminTokenPayload) {
-  const where: Prisma.AdminUserWhereInput = actor.role === 'SYSTEM_OWNER' ? {} : { role: 'REGIONAL_ADMIN' };
+  const where: Prisma.AdminUserWhereInput = actor.role === 'SYSTEM_OWNER' ? { isDeleted: false } : { role: 'REGIONAL_ADMIN', isDeleted: false };
   const admins = await prisma.adminUser.findMany({ where, orderBy: [{ role: 'asc' }, { username: 'asc' }] });
   return admins.map(publicAdmin);
 }
@@ -541,21 +542,22 @@ export async function resetAdminTwoFactor(actor: AdminTokenPayload, id: string, 
   return publicAdmin(updated);
 }
 
-export async function deactivateAdminUser(actor: AdminTokenPayload, id: string, metadata: RequestMetadata = {}) {
-  const current = await prisma.adminUser.findUnique({ where: { id } });
+export async function deactivateAdminUser(actor: AdminTokenPayload, id: string, input: Record<string, unknown> = {}, metadata: RequestMetadata = {}) {
+  const data = deletionPayload(input, actor);
+  if (actor.adminId === id) throw new AppError('Неможливо видалити власний обліковий запис адміністратора.', 400);
+  const current = await prisma.adminUser.findFirst({ where: { id, isDeleted: false } });
   if (!current) throw new AppError('Адміністратора не знайдено.', 404);
   const currentRole = validateRole(current.role);
   if (currentRole === 'SYSTEM_OWNER') {
-    await auditForbiddenOwnerAction(actor, metadata, `Спроба деактивувати SYSTEM_OWNER: ${current.username}`);
+    await auditForbiddenOwnerAction(actor, metadata, `Спроба видалити SYSTEM_OWNER: ${current.username}`);
     throw new AppError(OWNER_LOCK_MESSAGE, 403);
   }
-  ensureCanManageTarget(actor, currentRole);
-  const admin = await prisma.adminUser.update({ where: { id }, data: { isActive: false } });
+  const admin = await prisma.adminUser.update({ where: { id }, data: { ...data, isActive: false } });
   await createAuditLog({
-    action: 'Адміністратор деактивований',
+    action: 'Адміністратор видалений',
     entityType: 'admin',
     entityId: admin.id,
-    details: admin.username,
+    details: `${admin.username}; причина: ${data.deleteReason}`,
     targetAdminId: admin.id,
     targetRole: currentRole,
     targetDepartment: admin.department,

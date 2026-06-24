@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { DEPARTMENTS } from '../constants/departments';
 import { createOfficer, deactivateOfficer, getOfficers, PIN_ERROR, updateOfficer } from '../services/officerService';
 import { getDepartments, getDepartmentUnits } from '../services/organizationService';
+import { canDeleteRecords } from '../services/adminService';
 import type { AdminUser, CreateOfficerInput, Department, DepartmentUnit, Officer } from '../types';
 import { BADGE_NUMBER_ERROR, isValidBadgeNumber, sanitizeBadgeNumber } from '../utils/badgeNumber';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 
 function defaultForm(currentAdmin: AdminUser): CreateOfficerInput {
   return {
@@ -44,6 +46,7 @@ function downloadCsv(officers: Officer[]) {
 
 export function OfficerDirectory({ currentAdmin }: { currentAdmin: AdminUser }) {
   const isRegional = currentAdmin.role === 'REGIONAL_ADMIN';
+  const canDelete = canDeleteRecords(currentAdmin);
   const [officers, setOfficers] = useState<Officer[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [departmentUnits, setDepartmentUnits] = useState<DepartmentUnit[]>([]);
@@ -57,6 +60,7 @@ export function OfficerDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState<Officer | null>(null);
 
   async function load() {
     setLoading(true);
@@ -168,13 +172,14 @@ export function OfficerDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
     }
   }
 
-  async function deactivate(item: Officer) {
-    if (!item.id || !window.confirm(`Деактивувати патрульного ${item.fullName}?`)) return;
+  async function deactivate(item: Officer, input: { reason: string; confirmText: string }) {
+    if (!item.id) return;
     try {
-      await deactivateOfficer(item.id);
+      await deactivateOfficer(item.id, input);
       await load();
+      setDeleteTarget(null);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не вдалося деактивувати патрульного.');
+      setError(caught instanceof Error ? caught.message : 'Не вдалося видалити патрульного.');
     }
   }
 
@@ -199,7 +204,7 @@ export function OfficerDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
     {error && <p className="message error" role="alert">{error}</p>}
     {success && <p className="message success" role="status">{success}</p>}
 
-    {loading ? <div className="empty-state compact-empty">Завантаження…</div> : !officers.length ? <div className="empty-state compact-empty"><p>Користувачів ще не додано.</p></div> : !filtered.length ? <div className="empty-state compact-empty"><p>Користувачів за вибраними фільтрами не знайдено.</p></div> : <div className="table-card"><div className="table-scroll"><table><thead><tr><th>Жетон</th><th>ПІБ</th><th>УПП</th><th>Підрозділ</th><th>Активний</th><th>PIN встановлено</th><th>Дата створення</th><th>Дії</th></tr></thead><tbody>{filtered.map((item) => <tr key={item.id ?? item.badgeNumber}><td>{item.badgeNumber}</td><td>{item.fullName}</td><td>{item.department}</td><td>{item.unit || '—'}</td><td><span className={`status ${item.isActive === false ? 'needs_review' : 'completed'}`}>{item.isActive === false ? 'Ні' : 'Так'}</span></td><td>{item.hasPin ? 'Так' : 'Ні'}</td><td>{item.createdAt ? new Date(item.createdAt).toLocaleString('uk-UA') : '—'}</td><td className="row-actions"><button className="small-button" onClick={() => showForm(item)}>Редагувати</button>{item.isActive !== false && <button className="small-button danger-outline" onClick={() => void deactivate(item)}>Деактивувати</button>}</td></tr>)}</tbody></table></div></div>}
+    {loading ? <div className="empty-state compact-empty">Завантаження…</div> : !officers.length ? <div className="empty-state compact-empty"><p>Користувачів ще не додано.</p></div> : !filtered.length ? <div className="empty-state compact-empty"><p>Користувачів за вибраними фільтрами не знайдено.</p></div> : <div className="table-card"><div className="table-scroll"><table><thead><tr><th>Жетон</th><th>ПІБ</th><th>УПП</th><th>Підрозділ</th><th>Активний</th><th>PIN встановлено</th><th>Дата створення</th><th>Дії</th></tr></thead><tbody>{filtered.map((item) => <tr key={item.id ?? item.badgeNumber}><td>{item.badgeNumber}</td><td>{item.fullName}</td><td>{item.department}</td><td>{item.unit || '—'}</td><td><span className={`status ${item.isActive === false ? 'needs_review' : 'completed'}`}>{item.isActive === false ? 'Ні' : 'Так'}</span></td><td>{item.hasPin ? 'Так' : 'Ні'}</td><td>{item.createdAt ? new Date(item.createdAt).toLocaleString('uk-UA') : '—'}</td><td className="row-actions"><button className="small-button" onClick={() => showForm(item)}>Редагувати</button>{canDelete && item.isActive !== false && <button className="small-button danger-outline" onClick={() => setDeleteTarget(item)}>Видалити</button>}</td></tr>)}</tbody></table></div></div>}
 
     {open && <div className="modal-backdrop" onMouseDown={() => setOpen(false)}><form className="modal directory-modal" onSubmit={save} onMouseDown={(event) => event.stopPropagation()}>
       <div className="section-heading"><h2>{editing ? 'Редагування патрульного' : 'Новий патрульний'}</h2><button type="button" className="text-button" onClick={() => setOpen(false)}>Закрити</button></div>
@@ -214,5 +219,6 @@ export function OfficerDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
       {error && <p className="message error" role="alert">{error}</p>}
       <div className="modal-actions"><button type="submit">Зберегти</button><button type="button" className="secondary" onClick={() => setOpen(false)}>Скасувати</button></div>
     </form></div>}
+    {deleteTarget && <DeleteConfirmModal title="Видалити патрульного" description={`Буде приховано користувача: ${deleteTarget.fullName}.`} onCancel={() => setDeleteTarget(null)} onConfirm={(input) => deactivate(deleteTarget, input)} />}
   </section>;
 }

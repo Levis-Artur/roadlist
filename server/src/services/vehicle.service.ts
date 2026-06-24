@@ -5,6 +5,7 @@ import type { AdminTokenPayload, RequestMetadata } from '../types/index.js';
 import { normalizeVehicleNumber } from '../utils/normalizeVehicleNumber.js';
 import { createAuditLog } from './audit.service.js';
 import { assertDepartmentScope, resolveDepartmentAssignment } from './organization.service.js';
+import { canIncludeDeleted, deletionAuditMetadata, deletionPayload } from './softDelete.service.js';
 
 const FOREIGN_DEPARTMENT_MESSAGE = 'Недостатньо прав для доступу до даних іншого управління';
 
@@ -26,12 +27,12 @@ function uniqueVehicleError(error: unknown): never {
 
 export async function listAvailableVehicles() {
   const vehicles = await prisma.vehicle.findMany({
-    where: { isActive: true },
+    where: { isActive: true, isDeleted: false },
     orderBy: [{ brand: 'asc' }, { model: 'asc' }],
     select: { id: true, plateNumber: true, displayPlateNumber: true, brand: true, model: true, department: true, unit: true, departmentId: true, departmentName: true, departmentUnitId: true, departmentUnitName: true, isActive: true, createdAt: true, updatedAt: true },
   });
   const activeShifts = await prisma.routeSheet.findMany({
-    where: { status: 'active', vehicleNumber: { in: vehicles.map((vehicle) => vehicle.plateNumber) } },
+    where: { status: 'active', isDeleted: false, vehicleNumber: { in: vehicles.map((vehicle) => vehicle.plateNumber) } },
     select: {
       id: true,
       vehicleNumber: true,
@@ -89,6 +90,7 @@ export async function listVehicles(filters: Record<string, unknown> = {}, actor?
   return prisma.vehicle.findMany({
     where: {
       isActive,
+      isDeleted: canIncludeDeleted(actor, filters.includeDeleted) ? undefined : false,
       departmentId: departmentId || undefined,
       departmentUnitId: departmentUnitId || undefined,
       department: department ? { contains: department, mode: 'insensitive' } : undefined,
@@ -120,7 +122,7 @@ export async function createVehicle(input: Record<string, unknown>, metadata: Re
 }
 
 export async function updateVehicle(id: string, input: Record<string, unknown>, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
-  const current = await prisma.vehicle.findUnique({ where: { id } });
+  const current = await prisma.vehicle.findFirst({ where: { id, isDeleted: false } });
   if (!current) throw new AppError('Автомобіль не знайдено.', 404);
   assertDepartmentScope(actor, current);
   const displayPlateNumber = input.displayPlateNumber === undefined
@@ -147,21 +149,35 @@ export async function updateVehicle(id: string, input: Record<string, unknown>, 
   } catch (error) { uniqueVehicleError(error); }
 }
 
-export async function deactivateVehicle(id: string, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
-  const current = await prisma.vehicle.findUnique({ where: { id } });
+export async function deactivateVehicle(id: string, input: Record<string, unknown> = {}, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
+  const data = deletionPayload(input, actor);
+  const current = await prisma.vehicle.findFirst({ where: { id, isDeleted: false } });
   if (!current) throw new AppError('Автомобіль не знайдено.', 404);
-  assertDepartmentScope(actor, current);
-  await prisma.vehicle.update({ where: { id }, data: { isActive: false } });
-  await createAuditLog({ action: 'Деактивовано автомобіль', entityType: 'vehicle', entityId: id, details: current.plateNumber, ...metadata });
+  const activeShift = await prisma.routeSheet.findFirst({
+    where: { vehicleNumber: current.plateNumber, status: 'active', isDeleted: false },
+    select: { id: true },
+  });
+  if (activeShift) throw new AppError('Неможливо видалити автомобіль: по ньому є активна незавершена зміна.', 409);
+  await prisma.vehicle.update({ where: { id }, data: { ...data, isActive: false } });
+  await createAuditLog({
+    action: 'Автомобіль видалено',
+    entityType: 'vehicle',
+    entityId: id,
+    details: `${current.plateNumber}; причина: ${data.deleteReason}`,
+    targetDepartment: current.department,
+    targetDepartmentId: current.departmentId,
+    targetUnit: current.unit,
+    ...deletionAuditMetadata(actor, metadata),
+  });
 }
 
 export async function transferVehicle(id: string, input: Record<string, unknown>, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   if (!actor) throw new AppError('Потрібна авторизація адміністратора.', 401);
-  const current = await prisma.vehicle.findUnique({ where: { id } });
+  const current = await prisma.vehicle.findFirst({ where: { id, isDeleted: false } });
   if (!current) throw new AppError('Автомобіль не знайдено.', 404);
   assertDepartmentScope(actor, current);
   const activeShift = await prisma.routeSheet.findFirst({
-    where: { vehicleNumber: current.plateNumber, status: 'active' },
+    where: { vehicleNumber: current.plateNumber, status: 'active', isDeleted: false },
     select: { id: true },
   });
   if (activeShift) {
@@ -223,7 +239,7 @@ export async function transferVehicle(id: string, input: Record<string, unknown>
 }
 
 export async function listVehicleTransferHistory(id: string, actor?: AdminTokenPayload) {
-  const vehicle = await prisma.vehicle.findUnique({ where: { id } });
+  const vehicle = await prisma.vehicle.findFirst({ where: { id, isDeleted: false } });
   if (!vehicle) throw new AppError('Автомобіль не знайдено.', 404);
   assertDepartmentScope(actor, vehicle);
   return prisma.vehicleTransferHistory.findMany({ where: { vehicleId: id }, orderBy: { transferredAt: 'desc' } });

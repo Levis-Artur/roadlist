@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   finishShiftController,
   getRouteSheetController,
+  deleteRouteSheetController,
   listMyActiveRouteSheetsController,
   listRouteSheetsController,
   markRouteSheetNeedsReviewController,
@@ -21,3 +22,4 @@ routeSheetRouter.post('/:id/verify', authAdmin, verifyRouteSheetController);
 routeSheetRouter.post('/:id/mark-needs-review', authAdmin, markRouteSheetNeedsReviewController);
 routeSheetRouter.patch('/:id/admin-comment', authAdmin, updateRouteSheetAdminCommentController);
 routeSheetRouter.get('/:id', authAdmin, getRouteSheetController);
+routeSheetRouter.delete('/:id', authAdmin, deleteRouteSheetController);

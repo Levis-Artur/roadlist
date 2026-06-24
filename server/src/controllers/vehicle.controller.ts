@@ -40,7 +40,7 @@ export async function listVehicleTransferHistoryController(request: Request, res
 
 export async function deactivateVehicleController(request: Request, response: Response, next: NextFunction) {
   try {
-    await deactivateVehicle(request.params.id, metadata(request), request.admin);
-    response.json({ success: true, message: 'Автомобіль деактивовано' });
+    await deactivateVehicle(request.params.id, request.body ?? {}, metadata(request), request.admin);
+    response.json({ success: true, message: 'Автомобіль видалено' });
   } catch (error) { next(error); }
 }

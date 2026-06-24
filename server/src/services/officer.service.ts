@@ -8,6 +8,7 @@ import type { AdminTokenPayload, RequestMetadata } from '../types/index.js';
 import { createAuditLog } from './audit.service.js';
 import { validateBadgeNumber } from '../utils/badgeNumber.js';
 import { assertDepartmentScope, resolveDepartmentAssignment } from './organization.service.js';
+import { canIncludeDeleted, deletionAuditMetadata, deletionPayload } from './softDelete.service.js';
 
 const PIN_PATTERN = /^\d{4,8}$/;
 const PIN_ERROR = 'PIN має містити від 4 до 8 цифр.';
@@ -39,7 +40,7 @@ function uniqueOfficerError(error: unknown): never {
 export async function verifyOfficer(badgeNumber: string, metadata: RequestMetadata = {}) {
   const normalizedBadge = validateBadgeNumber(badgeNumber);
   const officer = await prisma.officer.findFirst({
-    where: { badgeNumber: normalizedBadge, isActive: true },
+    where: { badgeNumber: normalizedBadge, isActive: true, isDeleted: false },
     select: { badgeNumber: true, fullName: true, department: true, unit: true, departmentId: true, departmentName: true, departmentUnitId: true, departmentUnitName: true },
   });
   await createAuditLog({
@@ -59,6 +60,7 @@ export async function listOfficers(filters: Record<string, unknown>) {
   const officers = await prisma.officer.findMany({
     where: {
       isActive,
+      isDeleted: canIncludeDeleted(undefined, filters.includeDeleted) ? undefined : false,
       departmentId: departmentId || undefined,
       departmentUnitId: departmentUnitId || undefined,
       department: department ? { contains: department, mode: 'insensitive' } : undefined,
@@ -84,11 +86,33 @@ function assertDepartmentAccess(actor: AdminTokenPayload | undefined, department
 }
 
 export async function listOfficersScoped(filters: Record<string, unknown>, actor?: AdminTokenPayload) {
-  return listOfficers({
+  const scopedFilters: Record<string, unknown> = {
     ...filters,
     department: scopedDepartment(actor, typeof filters.department === 'string' ? filters.department : undefined),
     departmentId: actor?.role === 'REGIONAL_ADMIN' ? actor.departmentId ?? undefined : filters.departmentId,
+  };
+  const search = typeof scopedFilters.search === 'string' ? scopedFilters.search.trim() : '';
+  const department = typeof scopedFilters.department === 'string' ? scopedFilters.department.trim() : '';
+  const departmentId = typeof scopedFilters.departmentId === 'string' ? scopedFilters.departmentId.trim() : '';
+  const unit = typeof scopedFilters.unit === 'string' ? scopedFilters.unit.trim() : '';
+  const departmentUnitId = typeof scopedFilters.departmentUnitId === 'string' ? scopedFilters.departmentUnitId.trim() : '';
+  const isActive = scopedFilters.isActive === 'true' ? true : scopedFilters.isActive === 'false' ? false : undefined;
+  const officers = await prisma.officer.findMany({
+    where: {
+      isActive,
+      isDeleted: canIncludeDeleted(actor, scopedFilters.includeDeleted) ? undefined : false,
+      departmentId: departmentId || undefined,
+      departmentUnitId: departmentUnitId || undefined,
+      department: department ? { contains: department, mode: 'insensitive' } : undefined,
+      unit: unit ? { contains: unit, mode: 'insensitive' } : undefined,
+      OR: search ? [
+        { badgeNumber: { contains: search } },
+        { fullName: { contains: search, mode: 'insensitive' } },
+      ] : undefined,
+    },
+    orderBy: [{ isActive: 'desc' }, { fullName: 'asc' }],
   });
+  return officers.map(publicOfficer);
 }
 
 export async function createOfficer(input: Record<string, unknown>, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
@@ -107,7 +131,7 @@ export async function createOfficer(input: Record<string, unknown>, metadata: Re
 }
 
 export async function updateOfficer(id: string, input: Record<string, unknown>, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
-  const current = await prisma.officer.findUnique({ where: { id } });
+  const current = await prisma.officer.findFirst({ where: { id, isDeleted: false } });
   if (!current) throw new AppError('Патрульного не знайдено.', 404);
   assertDepartmentScope(actor, current);
   const badgeNumber = input.badgeNumber === undefined ? current.badgeNumber : validateBadgeNumber(input.badgeNumber);
@@ -127,12 +151,27 @@ export async function updateOfficer(id: string, input: Record<string, unknown>, 
   } catch (error) { uniqueOfficerError(error); }
 }
 
-export async function deactivateOfficer(id: string, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
-  const current = await prisma.officer.findUnique({ where: { id } });
+export async function deactivateOfficer(id: string, input: Record<string, unknown> = {}, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
+  const data = deletionPayload(input, actor);
+  const current = await prisma.officer.findFirst({ where: { id, isDeleted: false } });
   if (!current) throw new AppError('Патрульного не знайдено.', 404);
-  assertDepartmentScope(actor, current);
-  await prisma.officer.update({ where: { id }, data: { isActive: false } });
-  await createAuditLog({ action: 'Деактивовано патрульного', entityType: 'officer', entityId: id, badgeNumber: current.badgeNumber, details: current.fullName, ...metadata });
+  const activeShift = await prisma.routeSheet.findFirst({
+    where: { badgeNumber: current.badgeNumber, status: 'active', isDeleted: false },
+    select: { id: true },
+  });
+  if (activeShift) throw new AppError('Неможливо видалити користувача: у нього є активна незавершена зміна.', 409);
+  await prisma.officer.update({ where: { id }, data: { ...data, isActive: false } });
+  await createAuditLog({
+    action: 'Патрульного видалено',
+    entityType: 'officer',
+    entityId: id,
+    badgeNumber: current.badgeNumber,
+    details: `${current.fullName}; причина: ${data.deleteReason}`,
+    targetDepartment: current.department,
+    targetDepartmentId: current.departmentId,
+    targetUnit: current.unit,
+    ...deletionAuditMetadata(actor, metadata),
+  });
 }
 
 export async function loginOfficer(badgeValue: unknown, pinValue: unknown, metadata: RequestMetadata = {}) {
@@ -151,7 +190,7 @@ export async function loginOfficer(badgeValue: unknown, pinValue: unknown, metad
     });
     throw error;
   }
-  const officer = await prisma.officer.findUnique({ where: { badgeNumber } });
+  const officer = await prisma.officer.findFirst({ where: { badgeNumber, isDeleted: false } });
   if (!officer) {
     await createAuditLog({ action: 'Невдала спроба входу патрульного', entityType: 'officer', badgeNumber, details: 'Невірні облікові дані', ...metadata });
     throw new AppError('Невірний номер жетона або PIN', 401);

@@ -4,6 +4,7 @@ import { AppError } from '../middleware/errorHandler.js';
 import type { AdminTokenPayload, RequestMetadata } from '../types/index.js';
 import { createAuditLog } from './audit.service.js';
 import { assertDepartmentScope } from './organization.service.js';
+import { canIncludeDeleted, deletionAuditMetadata, deletionPayload } from './softDelete.service.js';
 
 export interface MonthlyRouteSheetFilters {
   year?: string;
@@ -14,10 +15,12 @@ export interface MonthlyRouteSheetFilters {
   unit?: string;
   departmentId?: string;
   departmentUnitId?: string;
+  includeDeleted?: string;
 }
 
 function monthlyWhere(filters: MonthlyRouteSheetFilters, actor?: AdminTokenPayload): Prisma.VehicleMonthlyRouteSheetWhereInput {
   const where: Prisma.VehicleMonthlyRouteSheetWhereInput = {};
+  where.isDeleted = canIncludeDeleted(actor, filters.includeDeleted) ? undefined : false;
   if (filters.year) where.year = Number(filters.year);
   if (filters.month) where.month = Number(filters.month);
   if (filters.vehicleId) where.vehicleId = filters.vehicleId;
@@ -57,20 +60,20 @@ export async function getMonthlyRouteSheet(id: string, actor?: AdminTokenPayload
   const item = await prisma.vehicleMonthlyRouteSheet.findUnique({
     where: { id },
     include: {
-      shiftEntries: { orderBy: [{ startedAt: 'asc' }, { createdAt: 'asc' }] },
+      shiftEntries: { where: { isDeleted: false }, orderBy: [{ startedAt: 'asc' }, { createdAt: 'asc' }] },
       _count: { select: { shiftEntries: true } },
     },
   });
-  if (!item) throw new AppError('Місячний маршрутний лист не знайдено.', 404);
+  if (!item || (item.isDeleted && actor?.role !== 'SYSTEM_OWNER')) throw new AppError('Місячний маршрутний лист не знайдено.', 404);
   assertDepartmentScope(actor, item);
   return withShiftCount(item);
 }
 
 export async function closeMonthlyRouteSheet(id: string, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const item = await prisma.vehicleMonthlyRouteSheet.findUnique({ where: { id } });
-  if (!item) throw new AppError('Місячний маршрутний лист не знайдено.', 404);
+  if (!item || item.isDeleted) throw new AppError('Місячний маршрутний лист не знайдено.', 404);
   assertDepartmentScope(actor, item);
-  const activeShift = await prisma.routeSheet.findFirst({ where: { monthlyRouteSheetId: id, status: 'active' } });
+  const activeShift = await prisma.routeSheet.findFirst({ where: { monthlyRouteSheetId: id, status: 'active', isDeleted: false } });
   if (activeShift) {
     throw new AppError('Неможливо закрити місяць: є незавершені зміни по цьому автомобілю.', 409);
   }
@@ -90,7 +93,7 @@ export async function closeMonthlyRouteSheet(id: string, metadata: RequestMetada
 
 export async function reopenMonthlyRouteSheet(id: string, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const item = await prisma.vehicleMonthlyRouteSheet.findUnique({ where: { id } });
-  if (!item) throw new AppError('Місячний маршрутний лист не знайдено.', 404);
+  if (!item || item.isDeleted) throw new AppError('Місячний маршрутний лист не знайдено.', 404);
   assertDepartmentScope(actor, item);
   const reopened = await prisma.vehicleMonthlyRouteSheet.update({
     where: { id },
@@ -108,7 +111,7 @@ export async function reopenMonthlyRouteSheet(id: string, metadata: RequestMetad
 
 export async function markMonthlyRouteSheetPrinted(id: string, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
   const item = await prisma.vehicleMonthlyRouteSheet.findUnique({ where: { id } });
-  if (!item) throw new AppError('Місячний маршрутний лист не знайдено.', 404);
+  if (!item || item.isDeleted) throw new AppError('Місячний маршрутний лист не знайдено.', 404);
   assertDepartmentScope(actor, item);
   const printed = await prisma.vehicleMonthlyRouteSheet.update({ where: { id }, data: { printedAt: new Date() } });
   await createAuditLog({
@@ -123,4 +126,27 @@ export async function markMonthlyRouteSheetPrinted(id: string, metadata: Request
 
 export async function getMonthlyRouteSheetPrintData(id: string, actor?: AdminTokenPayload) {
   return getMonthlyRouteSheet(id, actor);
+}
+
+export async function deleteMonthlyRouteSheet(id: string, input: Record<string, unknown>, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
+  const data = deletionPayload(input, actor);
+  const item = await prisma.vehicleMonthlyRouteSheet.findFirst({ where: { id, isDeleted: false } });
+  if (!item) throw new AppError('Місячний маршрутний лист не знайдено.', 404);
+  assertDepartmentScope(actor, item);
+  const activeShift = await prisma.routeSheet.findFirst({
+    where: { monthlyRouteSheetId: id, status: 'active', isDeleted: false },
+    select: { id: true },
+  });
+  if (activeShift) throw new AppError('Неможливо видалити місячний маршрутний лист: є активні незавершені зміни.', 409);
+  const deleted = await prisma.vehicleMonthlyRouteSheet.update({ where: { id }, data });
+  await createAuditLog({
+    action: 'Місячний маршрутний лист видалено',
+    entityType: 'monthly_route_sheet',
+    entityId: id,
+    details: `${deleted.vehicleBrand} ${deleted.vehicleModel}; ${deleted.displayVehicleNumber ?? deleted.vehicleNumber}; причина: ${data.deleteReason}`,
+    targetDepartment: deleted.departmentName ?? deleted.department,
+    targetDepartmentId: deleted.departmentId,
+    targetUnit: deleted.departmentUnitName ?? deleted.unit,
+    ...deletionAuditMetadata(actor, metadata),
+  });
 }

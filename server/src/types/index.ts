@@ -69,6 +69,7 @@ export interface RouteSheetFilters {
   from?: string;
   to?: string;
   search?: string;
+  includeDeleted?: string;
 }
 
 export interface AuditLogInput extends RequestMetadata {

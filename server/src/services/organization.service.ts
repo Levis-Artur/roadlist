@@ -3,6 +3,7 @@ import { prisma } from '../config/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import type { AdminTokenPayload, RequestMetadata } from '../types/index.js';
 import { createAuditLog } from './audit.service.js';
+import { canIncludeDeleted, deletionAuditMetadata, deletionPayload } from './softDelete.service.js';
 
 const FOREIGN_DEPARTMENT_MESSAGE = 'Недостатньо прав для доступу до даних іншого управління';
 
@@ -40,20 +41,20 @@ export function scopedDepartmentWhere(actor?: AdminTokenPayload): Prisma.Enumera
 async function departmentByInput(input: Record<string, unknown>, actor?: AdminTokenPayload) {
   if (actor?.role === 'REGIONAL_ADMIN') {
     const department = actor.departmentId
-      ? await prisma.department.findFirst({ where: { id: actor.departmentId, isActive: true } })
-      : await prisma.department.findFirst({ where: { name: actor.departmentName || actor.department || '', isActive: true } });
+      ? await prisma.department.findFirst({ where: { id: actor.departmentId, isActive: true, isDeleted: false } })
+      : await prisma.department.findFirst({ where: { name: actor.departmentName || actor.department || '', isActive: true, isDeleted: false } });
     if (!department) throw new AppError('Управління регіонального адміністратора не знайдено або неактивне.', 403);
     return department;
   }
   const departmentId = optionalText(input.departmentId);
   if (departmentId) {
-    const department = await prisma.department.findFirst({ where: { id: departmentId, isActive: true } });
+    const department = await prisma.department.findFirst({ where: { id: departmentId, isActive: true, isDeleted: false } });
     if (!department) throw new AppError('Управління не знайдено або неактивне.', 404);
     return department;
   }
   const name = optionalText(input.departmentName) || optionalText(input.department);
   if (!name) throw new AppError('Управління обов’язкове.', 400);
-  const department = await prisma.department.findFirst({ where: { name, isActive: true } });
+  const department = await prisma.department.findFirst({ where: { name, isActive: true, isDeleted: false } });
   if (!department) throw new AppError('Управління не знайдено або неактивне.', 404);
   return department;
 }
@@ -61,7 +62,7 @@ async function departmentByInput(input: Record<string, unknown>, actor?: AdminTo
 async function unitByInput(input: Record<string, unknown>, departmentId: string) {
   const departmentUnitId = optionalText(input.departmentUnitId);
   if (departmentUnitId) {
-    const unit = await prisma.departmentUnit.findFirst({ where: { id: departmentUnitId, departmentId, isActive: true } });
+    const unit = await prisma.departmentUnit.findFirst({ where: { id: departmentUnitId, departmentId, isActive: true, isDeleted: false } });
     if (!unit) throw new AppError('Внутрішній підрозділ не знайдено або він належить іншому управлінню.', 404);
     return unit;
   }
@@ -88,18 +89,22 @@ export async function resolveDepartmentAssignment(input: Record<string, unknown>
   };
 }
 
-export async function listDepartments(actor?: AdminTokenPayload) {
+export async function listDepartments(actor?: AdminTokenPayload, filters: Record<string, unknown> = {}) {
+  const where: Prisma.DepartmentWhereInput = {
+    ...(scopedDepartmentWhere(actor) as Prisma.DepartmentWhereInput | undefined),
+    isDeleted: canIncludeDeleted(actor, filters.includeDeleted) ? undefined : false,
+  };
   const departments = await prisma.department.findMany({
-    where: scopedDepartmentWhere(actor) as Prisma.DepartmentWhereInput | undefined,
+    where,
     include: {
       _count: { select: { units: true } },
     },
     orderBy: [{ isActive: 'desc' }, { name: 'asc' }],
   });
   const [vehicles, officers, routeSheets] = await Promise.all([
-    prisma.vehicle.groupBy({ by: ['departmentId'], _count: { _all: true } }),
-    prisma.officer.groupBy({ by: ['departmentId'], _count: { _all: true } }),
-    prisma.routeSheet.groupBy({ by: ['departmentId'], _count: { _all: true } }),
+    prisma.vehicle.groupBy({ by: ['departmentId'], where: { isDeleted: false }, _count: { _all: true } }),
+    prisma.officer.groupBy({ by: ['departmentId'], where: { isDeleted: false }, _count: { _all: true } }),
+    prisma.routeSheet.groupBy({ by: ['departmentId'], where: { isDeleted: false }, _count: { _all: true } }),
   ]);
   const vehicleCounts = new Map(vehicles.map((item) => [item.departmentId, item._count._all]));
   const officerCounts = new Map(officers.map((item) => [item.departmentId, item._count._all]));
@@ -147,7 +152,9 @@ export async function updateDepartment(id: string, input: Record<string, unknown
 
 export async function listDepartmentUnits(filters: Record<string, unknown> = {}, actor?: AdminTokenPayload) {
   const requestedDepartmentId = optionalText(filters.departmentId);
-  const where: Prisma.DepartmentUnitWhereInput = {};
+  const where: Prisma.DepartmentUnitWhereInput = {
+    isDeleted: canIncludeDeleted(actor, filters.includeDeleted) ? undefined : false,
+  };
   if (actor?.role === 'REGIONAL_ADMIN') {
     where.departmentId = actor.departmentId || '__none__';
   } else if (requestedDepartmentId) {
@@ -186,7 +193,7 @@ export async function createDepartmentUnit(input: Record<string, unknown>, metad
 }
 
 export async function updateDepartmentUnit(id: string, input: Record<string, unknown>, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
-  const current = await prisma.departmentUnit.findUnique({ where: { id }, include: { department: true } });
+  const current = await prisma.departmentUnit.findFirst({ where: { id, isDeleted: false }, include: { department: true } });
   if (!current) throw new AppError('Внутрішній підрозділ не знайдено.', 404);
   assertDepartmentScope(actor, { departmentId: current.departmentId, departmentName: current.department.name });
   const unit = await prisma.departmentUnit.update({
@@ -202,4 +209,53 @@ export async function updateDepartmentUnit(id: string, input: Record<string, unk
   });
   await createAuditLog({ action: 'Внутрішній підрозділ оновлено', entityType: 'department_unit', entityId: id, details: `${unit.department.name}; ${unit.name}`, targetDepartmentId: unit.departmentId, targetDepartment: unit.department.name, targetUnit: unit.name, ...metadata });
   return unit;
+}
+
+export async function deleteDepartment(id: string, input: Record<string, unknown>, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
+  const data = deletionPayload(input, actor);
+  const current = await prisma.department.findFirst({ where: { id, isDeleted: false } });
+  if (!current) throw new AppError('Управління не знайдено.', 404);
+  const activeShift = await prisma.routeSheet.findFirst({
+    where: {
+      status: 'active',
+      isDeleted: false,
+      OR: [{ departmentId: id }, { department: current.name }, { departmentName: current.name }],
+    },
+    select: { id: true },
+  });
+  if (activeShift) throw new AppError('Неможливо видалити управління: є активні незавершені зміни.', 409);
+  const department = await prisma.department.update({
+    where: { id },
+    data: { ...data, isActive: false },
+  });
+  await createAuditLog({
+    action: 'Управління видалено',
+    entityType: 'department',
+    entityId: id,
+    details: `${department.name}; причина: ${data.deleteReason}`,
+    targetDepartmentId: id,
+    targetDepartment: department.name,
+    ...deletionAuditMetadata(actor, metadata),
+  });
+}
+
+export async function deleteDepartmentUnit(id: string, input: Record<string, unknown>, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {
+  const data = deletionPayload(input, actor);
+  const current = await prisma.departmentUnit.findFirst({ where: { id, isDeleted: false }, include: { department: true } });
+  if (!current) throw new AppError('Внутрішній підрозділ не знайдено.', 404);
+  const unit = await prisma.departmentUnit.update({
+    where: { id },
+    data: { ...data, isActive: false },
+    include: { department: true },
+  });
+  await createAuditLog({
+    action: 'Внутрішній підрозділ видалено',
+    entityType: 'department_unit',
+    entityId: id,
+    details: `${unit.department.name}; ${unit.name}; причина: ${data.deleteReason}`,
+    targetDepartmentId: unit.departmentId,
+    targetDepartment: unit.department.name,
+    targetUnit: unit.name,
+    ...deletionAuditMetadata(actor, metadata),
+  });
 }

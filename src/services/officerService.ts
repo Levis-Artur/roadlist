@@ -197,8 +197,8 @@ export function getAuthenticatedOfficer(): Officer | null {
   try { return JSON.parse(sessionStorage.getItem(OFFICER_SESSION_KEY) || 'null') as Officer | null; } catch { return null; }
 }
 
-export async function deactivateOfficer(id: string): Promise<void> {
-  try { await apiDelete(`/api/officers/${id}`); }
+export async function deactivateOfficer(id: string, input: { reason?: string; confirmText?: string } = {}): Promise<void> {
+  try { await apiDelete(`/api/officers/${id}`, input.reason ? input : undefined); }
   catch (error) {
     if (!isApiUnavailableError(error)) throw error;
     const officers = localOfficers().map((item) => item.id === id ? { ...item, isActive: false, updatedAt: new Date().toISOString() } : item);
