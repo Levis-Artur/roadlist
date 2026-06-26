@@ -226,6 +226,7 @@ model OdometerPhoto {
   id           String      @id @default(uuid())
   routeSheetId String?
   routeSheet   RouteSheet? @relation(fields: [routeSheetId], references: [id], onDelete: SetNull)
+  uploadedByBadgeNumber String?
   type         String
   filePath     String
   originalName String?
@@ -240,6 +241,7 @@ model OdometerPhoto {
   deleteReason String?
 
   @@index([routeSheetId])
+  @@index([uploadedByBadgeNumber])
   @@index([expiresAt, deletedAt])
 }
 

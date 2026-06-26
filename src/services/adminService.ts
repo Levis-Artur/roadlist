@@ -1,5 +1,5 @@
 import type { AdminRole, AdminUser } from '../types';
-import { apiDelete, apiGet, apiPatch, apiPost, getApiUrl } from './apiClient';
+import { ApiUnavailableError, apiDelete, apiGet, apiPatch, apiPost, getApiUrl } from './apiClient';
 
 const ADMIN_TOKEN_KEY = 'admin_token';
 const ADMIN_PENDING_TOKEN_KEY = 'admin_2fa_pending_token';
@@ -73,6 +73,10 @@ function pendingAuthorizationHeader() {
   return token ? { Authorization: `Bearer ${token}` } : undefined;
 }
 
+function safeHttpMessage(status: number, fallback: string, payload?: { message?: string }) {
+  return status >= 500 ? 'Помилка сервера. Спробуйте пізніше.' : payload?.message || fallback;
+}
+
 export function getCurrentAdmin(): AdminUser | null {
   try {
     return JSON.parse(sessionStorage.getItem(ADMIN_SESSION_KEY) || 'null') as AdminUser | null;
@@ -108,10 +112,13 @@ export async function changeOwnPassword(input: {
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify(input),
+  }).catch((error) => {
+    if (import.meta.env.DEV) console.error('[adminService.changeOwnPassword]', error);
+    throw new ApiUnavailableError();
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => undefined);
-    throw new Error(payload?.message || 'Не вдалося змінити пароль.');
+    throw new Error(safeHttpMessage(response.status, 'Не вдалося змінити пароль.', payload));
   }
   logoutAdmin();
 }
@@ -120,9 +127,12 @@ export async function setupTwoFactor(): Promise<{ qrCodeDataUrl: string; manualE
   const response = await fetch(getApiUrl('/api/admin/2fa/setup'), {
     method: 'POST',
     headers: { Accept: 'application/json', ...(pendingAuthorizationHeader() ?? {}) },
+  }).catch((error) => {
+    if (import.meta.env.DEV) console.error('[adminService.setupTwoFactor]', error);
+    throw new ApiUnavailableError();
   });
   const payload = await response.json();
-  if (!response.ok) throw new Error(payload?.message || 'Не вдалося почати налаштування 2FA.');
+  if (!response.ok) throw new Error(safeHttpMessage(response.status, 'Не вдалося почати налаштування 2FA.', payload));
   return payload;
 }
 
@@ -131,9 +141,12 @@ async function submitTwoFactor(path: string, code: string): Promise<AdminUser> {
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json', ...(pendingAuthorizationHeader() ?? {}) },
     body: JSON.stringify({ code }),
+  }).catch((error) => {
+    if (import.meta.env.DEV) console.error('[adminService.submitTwoFactor]', error);
+    throw new ApiUnavailableError();
   });
   const payload = await response.json();
-  if (!response.ok) throw new Error(payload?.message || 'Невірний код автентифікатора');
+  if (!response.ok) throw new Error(safeHttpMessage(response.status, 'Невірний код автентифікатора', payload));
   if (!payload.token || !payload.admin) throw new Error('Некоректна відповідь сервера 2FA.');
   finishAdminLogin(payload.token, payload.admin);
   return payload.admin;

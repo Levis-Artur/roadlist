@@ -1,8 +1,6 @@
-import { useEffect } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AdminRoute } from './pages/AdminRoute';
 import { PatrolPage } from './pages/PatrolPage';
-import { cleanupExpiredPhotos } from './services/photoService';
 import mvsBadge from './assets/mvs-badge.svg';
 
 function AppHeader() {
@@ -26,13 +24,10 @@ function AppHeader() {
 }
 
 function StatusBar() {
-  return <footer className="status-bar"><span>Система готова</span><span>API з локальним резервом</span></footer>;
+  return <footer className="status-bar"><span>Система готова</span><span>Дані зберігаються на сервері</span></footer>;
 }
 
 export default function App() {
-  useEffect(() => {
-    void cleanupExpiredPhotos().catch(() => undefined);
-  }, []);
   return (
     <BrowserRouter>
       <div className="app-shell">

@@ -9,7 +9,7 @@ export class ApiError extends Error {
 
 export class ApiUnavailableError extends Error {
   constructor() {
-    super('Сервер недоступний. Спробуйте пізніше.');
+    super('Сервер недоступний. Перевірте підключення або спробуйте пізніше.');
     this.name = 'ApiUnavailableError';
   }
 }
@@ -67,7 +67,10 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
         sessionStorage.removeItem('admin_user');
         window.dispatchEvent(new CustomEvent('admin-session-expired'));
       }
-      throw new ApiError(payload?.message || `Помилка API (${response.status}).`, response.status);
+      const safeMessage = response.status >= 500
+        ? 'Помилка сервера. Спробуйте пізніше.'
+        : payload?.message || `Помилка API (${response.status}).`;
+      throw new ApiError(safeMessage, response.status);
     }
     return payload as T;
   } catch (error) {

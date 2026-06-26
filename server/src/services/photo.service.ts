@@ -4,11 +4,21 @@ import { AppError } from '../middleware/errorHandler.js';
 import type { PhotoType, RequestMetadata } from '../types/index.js';
 import { createAuditLog } from './audit.service.js';
 
-export async function saveUploadedPhoto(file: Express.Multer.File, type: PhotoType, metadata: RequestMetadata = {}) {
+export async function saveUploadedPhoto(
+  file: Express.Multer.File,
+  type: PhotoType,
+  metadata: RequestMetadata = {},
+  uploadedByBadgeNumber?: string,
+) {
+  if (!file.mimetype.startsWith('image/')) {
+    await fs.unlink(file.path).catch(() => undefined);
+    throw new AppError('Дозволено завантажувати лише зображення.', 400);
+  }
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 30);
   const photo = await prisma.odometerPhoto.create({
     data: {
+      uploadedByBadgeNumber,
       type,
       filePath: file.path,
       originalName: file.originalname,

@@ -173,7 +173,11 @@ export async function startShift(input: StartShiftInput, metadata: RequestMetada
           startedAt,
         },
       });
-      await tx.odometerPhoto.updateMany({ where: { id: startPhotoId }, data: { routeSheetId: createdRouteSheet.id, type: 'start' } });
+      const linkedPhoto = await tx.odometerPhoto.updateMany({
+        where: { id: startPhotoId, uploadedByBadgeNumber: badgeNumber, deletedAt: null, isDeleted: false },
+        data: { routeSheetId: createdRouteSheet.id, type: 'start' },
+      });
+      if (linkedPhoto.count !== 1) throw new AppError('Фото одометра недоступне або було видалене.', 404);
       return createdRouteSheet;
     });
   } catch (error) {
@@ -229,7 +233,11 @@ export async function finishShift(input: FinishShiftInput, metadata: RequestMeta
         endedAt: new Date(),
       },
     });
-    await tx.odometerPhoto.updateMany({ where: { id: endPhotoId }, data: { routeSheetId: updated.id, type: 'end' } });
+    const linkedPhoto = await tx.odometerPhoto.updateMany({
+      where: { id: endPhotoId, uploadedByBadgeNumber: badgeNumber, deletedAt: null, isDeleted: false },
+      data: { routeSheetId: updated.id, type: 'end' },
+    });
+    if (linkedPhoto.count !== 1) throw new AppError('Фото одометра недоступне або було видалене.', 404);
     if (monthlyRouteSheetId) await refreshMonthlyAggregates(tx, monthlyRouteSheetId);
     return updated;
   });

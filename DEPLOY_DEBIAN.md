@@ -47,6 +47,20 @@ nano .env.production
 openssl rand -hex 32
 ```
 
+`CORS_ORIGIN` у production має бути заданий явно і не може бути `*`. Вкажіть адресу, з якої відкривається frontend, наприклад:
+
+```env
+CORS_ORIGIN=https://route-sheet.example.gov.ua
+```
+
+Для кількох дозволених адрес використовуйте кому:
+
+```env
+CORS_ORIGIN=https://route-sheet.example.gov.ua,https://100.x.x.x
+```
+
+`UPLOAD_DIR` також має бути заданий явно, наприклад `/app/uploads`. За замовчуванням backend приймає тільки файли з MIME-типом `image/*` і обмежує фото одометра до `UPLOAD_MAX_BYTES=10485760`.
+
 Для адміністративних сесій використовуйте `ADMIN_JWT_EXPIRES_IN=2h`, для патрульних — `OFFICER_JWT_EXPIRES_IN=12h`. Не відкривайте систему з персональними даними через публічний HTTP без HTTPS; Tailscale підходить для закритого тесту.
 
 Для TOTP / Google Authenticator на сервері має бути коректний час:

@@ -15,7 +15,26 @@ import { env } from './config/env.js';
 export const app = express();
 
 app.disable('x-powered-by');
-app.use(cors({ origin: env.corsOrigin }));
+app.use((_request, response, next) => {
+  response.setHeader('X-Content-Type-Options', 'nosniff');
+  response.setHeader('X-Frame-Options', 'DENY');
+  response.setHeader('Referrer-Policy', 'no-referrer');
+  response.setHeader('Permissions-Policy', 'geolocation=(), microphone=()');
+  next();
+});
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+    if (env.corsOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(new AppError('Доступ з цього джерела заборонено.', 403));
+  },
+}));
 app.use(express.json({ limit: '1mb' }));
 app.use(requestLogger);
 

@@ -495,7 +495,7 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
       ) : (
         <section className="table-card">
           <div className="table-scroll">
-            <table>
+            <table className="responsive-table route-sheets-table">
               <thead><tr>
                 <th>Дата</th><th>ПІБ</th><th>Номер жетона</th><th>УПП</th><th>Підрозділ</th>
                 <th>Екіпаж / підрозділ</th><th>Автомобіль</th><th>Початковий км</th><th>Кінцевий км</th>
@@ -530,7 +530,7 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
       ) : (
         <section className="table-card">
           <div className="table-scroll">
-            <table>
+            <table className="responsive-table monthly-sheets-table">
               <thead><tr>
                 <th>Автомобіль</th><th>Номерний знак</th><th>УПП</th><th>Підрозділ</th><th>Місяць</th><th>Рік</th>
                 <th>Статус</th><th>Початковий км</th><th>Кінцевий км</th><th>Загальний пробіг</th>
@@ -575,7 +575,7 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
           <div className="empty-state compact-empty"><p>Записів журналу ще немає.</p></div>
         ) : (
           <div className="table-card"><div className="table-scroll">
-            <table>
+            <table className="responsive-table audit-table">
               <thead><tr><th>Дата/час</th><th>Дія</th><th>Тип сутності</th><th>Номер жетона</th><th>Деталі</th></tr></thead>
               <tbody>{auditLogs.map((log) => (
                 <tr key={log.id}><td>{formatDate(log.createdAt)}</td><td>{log.action}</td><td>{log.entityType}</td><td>{log.badgeNumber ?? '—'}</td><td>{log.details ?? '—'}</td></tr>
@@ -692,7 +692,7 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
               )}
             </div>
             <div className="table-scroll nested-table">
-              <table>
+              <table className="responsive-table monthly-entries-table">
                 <thead><tr>
                   <th>Дата</th><th>Час початку</th><th>Час завершення</th><th>ПІБ патрульного</th><th>Жетон</th>
                   <th>Екіпаж / підрозділ</th><th>Початковий км</th><th>Кінцевий км</th><th>Пробіг</th>

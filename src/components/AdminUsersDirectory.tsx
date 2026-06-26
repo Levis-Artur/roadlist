@@ -110,7 +110,7 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
       </div>
       {error && <p className="message error" role="alert">{error}</p>}
       {success && <p className="message success" role="status">{success}</p>}
-      <div className="table-card"><div className="table-scroll"><table>
+      <div className="table-card"><div className="table-scroll"><table className="responsive-table admin-users-table">
         <thead><tr><th>Логін</th><th>ПІБ</th><th>Роль</th><th>УПП</th><th>Підрозділ</th><th>Активний</th><th>2FA</th><th>Останній вхід</th><th>Зміна пароля</th><th>Тимчасовий пароль</th><th>Заблоковано до</th><th>Дії</th></tr></thead>
         <tbody>{items.map((item) => {
           const protectedOwner = item.role === 'SYSTEM_OWNER';

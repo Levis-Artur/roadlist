@@ -18,7 +18,7 @@ const upload = multer({
       callback(null, `${createId()}${extension}`);
     },
   }),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: env.uploadMaxBytes },
   fileFilter: (_request, file, callback) => {
     if (!file.mimetype.startsWith('image/')) {
       callback(new AppError('Дозволено завантажувати лише зображення.', 400));

@@ -191,7 +191,7 @@ export function DepartmentDirectory({ currentAdmin }: { currentAdmin: AdminUser 
     </div>
     <div className="directory-filters"><label>Пошук<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Назва, код або регіон" /></label></div>
     {error && <p className="message error" role="alert">{error}</p>}
-    {loading ? <div className="empty-state compact-empty">Завантаження…</div> : <div className="table-card"><div className="table-scroll"><table>
+    {loading ? <div className="empty-state compact-empty">Завантаження…</div> : <div className="table-card"><div className="table-scroll"><table className="responsive-table departments-table">
       <thead><tr><th>Назва управління</th><th>Код</th><th>Регіон</th><th>Активне</th><th>Підрозділів</th><th>Авто</th><th>Поліцейських</th><th>Маршрутних листів</th><th>Дії</th></tr></thead>
       <tbody>{filtered.map((item) => <tr key={item.id}>
         <td>{item.name}</td><td>{item.code || '—'}</td><td>{item.region || '—'}</td>
@@ -238,7 +238,7 @@ export function DepartmentDirectory({ currentAdmin }: { currentAdmin: AdminUser 
 
         <section className="modal-section">
           <div className="modal-section-header"><div><span className="eyebrow">Деталі управління</span><h3>Внутрішні підрозділи</h3></div>{canEdit && <button type="button" className="small-button" onClick={() => showUnitForm()}>Додати підрозділ</button>}</div>
-          {!details.units.length ? <div className="empty-state compact-empty">Внутрішніх підрозділів ще немає.</div> : <div className="table-scroll nested-table"><table>
+          {!details.units.length ? <div className="empty-state compact-empty">Внутрішніх підрозділів ще немає.</div> : <div className="table-scroll nested-table"><table className="responsive-table department-units-table">
             <thead><tr><th>Назва</th><th>Тип</th><th>Код</th><th>Активний</th><th>Автомобілі</th><th>Поліцейські</th><th>Маршрутні листи</th><th>Дії</th></tr></thead>
             <tbody>{details.units.map((unit) => <tr key={unit.id}>
               <td>{unit.name}</td><td>{unit.type || '—'}</td><td>{unit.code || '—'}</td><td>{unit.isActive ? 'Так' : 'Ні'}</td>
@@ -257,7 +257,7 @@ export function DepartmentDirectory({ currentAdmin }: { currentAdmin: AdminUser 
 
         <section className="modal-section">
           <div className="modal-section-header"><h3>Автомобілі</h3></div>
-          {!details.vehicles.length ? <div className="empty-state compact-empty">Немає автомобілів.</div> : <div className="table-scroll nested-table"><table>
+          {!details.vehicles.length ? <div className="empty-state compact-empty">Немає автомобілів.</div> : <div className="table-scroll nested-table"><table className="responsive-table department-vehicles-table">
             <thead><tr><th>Автомобіль</th><th>Номер</th><th>Підрозділ</th><th>Статус</th></tr></thead>
             <tbody>{details.vehicles.map((item) => <tr key={item.id}><td>{item.brand} {item.model}</td><td>{item.displayPlateNumber || item.plateNumber}</td><td>{item.unit || '—'}</td><td>{item.isActive ? 'Активний' : 'Неактивний'}</td></tr>)}</tbody>
           </table></div>}
@@ -265,7 +265,7 @@ export function DepartmentDirectory({ currentAdmin }: { currentAdmin: AdminUser 
 
         <section className="modal-section">
           <div className="modal-section-header"><h3>Поліцейські</h3></div>
-          {!details.officers.length ? <div className="empty-state compact-empty">Немає поліцейських.</div> : <div className="table-scroll nested-table"><table>
+          {!details.officers.length ? <div className="empty-state compact-empty">Немає поліцейських.</div> : <div className="table-scroll nested-table"><table className="responsive-table department-officers-table">
             <thead><tr><th>ПІБ</th><th>Жетон</th><th>Підрозділ</th><th>Статус</th></tr></thead>
             <tbody>{details.officers.map((item) => <tr key={item.id ?? item.badgeNumber}><td>{item.fullName}</td><td>{item.badgeNumber}</td><td>{item.unit || '—'}</td><td>{item.isActive === false ? 'Неактивний' : 'Активний'}</td></tr>)}</tbody>
           </table></div>}
@@ -274,7 +274,7 @@ export function DepartmentDirectory({ currentAdmin }: { currentAdmin: AdminUser 
         <section className="modal-section">
           <div className="modal-section-header"><h3>Маршрутні листи</h3></div>
           <p className="field-hint">Змін: {details.routeSheets.length}; місячних листів: {details.monthlySheets.length}; сумарний пробіг: {details.stats.distance} км.</p>
-          {!details.routeSheets.length ? <div className="empty-state compact-empty">Немає маршрутних листів.</div> : <div className="table-scroll nested-table"><table>
+          {!details.routeSheets.length ? <div className="empty-state compact-empty">Немає маршрутних листів.</div> : <div className="table-scroll nested-table"><table className="responsive-table department-routes-table">
             <thead><tr><th>Дата</th><th>Патрульний</th><th>Автомобіль</th><th>Пробіг</th><th>Статус</th></tr></thead>
             <tbody>{details.routeSheets.slice(0, 20).map((item) => <tr key={item.id}><td>{formatDate(item.startedAt)}</td><td>{item.fullName}</td><td>{item.displayVehicleNumber || item.vehicleNumber}</td><td>{item.distanceKm ?? '—'}</td><td>{item.status}</td></tr>)}</tbody>
           </table></div>}
@@ -282,7 +282,7 @@ export function DepartmentDirectory({ currentAdmin }: { currentAdmin: AdminUser 
 
         <section className="modal-section">
           <div className="modal-section-header"><h3>Журнал дій управління</h3></div>
-          {!details.auditLogs.length ? <div className="empty-state compact-empty">Журнал дій порожній.</div> : <div className="table-scroll nested-table"><table>
+          {!details.auditLogs.length ? <div className="empty-state compact-empty">Журнал дій порожній.</div> : <div className="table-scroll nested-table"><table className="responsive-table department-audit-table">
             <thead><tr><th>Час</th><th>Дія</th><th>Сутність</th><th>Деталі</th></tr></thead>
             <tbody>{details.auditLogs.slice(0, 20).map((log) => <tr key={log.id}><td>{formatDate(log.createdAt)}</td><td>{log.action}</td><td>{log.entityType}</td><td>{log.details || '—'}</td></tr>)}</tbody>
           </table></div>}

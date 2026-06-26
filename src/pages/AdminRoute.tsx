@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { changeOwnPassword, enableTwoFactor, getCurrentAdmin, isAdminAuthenticated, loginAdmin, logoutAdmin, setupTwoFactor, verifyTwoFactor } from '../services/adminService';
+import { changeOwnPassword, enableTwoFactor, getCurrentAdmin, getMyAdminProfile, isAdminAuthenticated, loginAdmin, logoutAdmin, setupTwoFactor, verifyTwoFactor } from '../services/adminService';
 import { AdminPage } from './AdminPage';
 import type { AdminUser } from '../types';
 
@@ -152,12 +152,11 @@ function AdminLogin({ onLogin, sessionMessage }: { onLogin: (phase?: AdminAuthPh
 }
 
 export function AdminRoute() {
-  const [authenticated, setAuthenticated] = useState(
-    () => isAdminAuthenticated(),
-  );
+  const [authenticated, setAuthenticated] = useState(false);
   const [admin, setAdmin] = useState(() => getCurrentAdmin());
   const [phase, setPhase] = useState<AdminAuthPhase>(() => isAdminAuthenticated() ? 'login' : 'login');
   const [sessionMessage, setSessionMessage] = useState('');
+  const [checkingSession, setCheckingSession] = useState(() => isAdminAuthenticated());
 
   function logout() {
     logoutAdmin();
@@ -166,6 +165,31 @@ export function AdminRoute() {
     setSessionMessage('');
     setPhase('login');
   }
+
+  useEffect(() => {
+    if (!isAdminAuthenticated()) {
+      setCheckingSession(false);
+      return;
+    }
+    let active = true;
+    getMyAdminProfile()
+      .then((profile) => {
+        if (!active) return;
+        setAdmin(profile);
+        setAuthenticated(true);
+      })
+      .catch(() => {
+        if (!active) return;
+        logoutAdmin();
+        setAdmin(null);
+        setAuthenticated(false);
+        setSessionMessage('Сесія завершилась. Увійдіть повторно.');
+      })
+      .finally(() => {
+        if (active) setCheckingSession(false);
+      });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     function expire() {
@@ -181,6 +205,7 @@ export function AdminRoute() {
   if (phase === 'change_password') return <PasswordChangeForm forced onChanged={logout} onCancel={logout} />;
   if (phase === 'setup_2fa') return <TwoFactorCodeForm setup onVerified={(verifiedAdmin) => { setAdmin(verifiedAdmin); setAuthenticated(true); setPhase('login'); }} />;
   if (phase === 'verify_2fa') return <TwoFactorCodeForm onVerified={(verifiedAdmin) => { setAdmin(verifiedAdmin); setAuthenticated(true); setPhase('login'); }} />;
+  if (checkingSession) return <main className="admin-login-page"><section className="admin-login-card"><div className="login-titlebar">Перевірка сесії адміністратора</div><p>Перевіряємо доступ через сервер…</p></section></main>;
 
   return authenticated && admin
     ? admin.mustChangePassword

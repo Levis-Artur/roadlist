@@ -43,6 +43,8 @@ button {
   color: var(--color-text);
   font-weight: 600;
   cursor: pointer;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 button:hover { background: linear-gradient(#fff, #c8d9e9); border-color: #53789a; }
 button:active { background: #bfd0df; box-shadow: inset 0 1px 2px rgba(15,39,66,.18); }
@@ -197,10 +199,17 @@ dd { margin: 0; padding: 7px 8px; font-weight: 600; overflow-wrap: anywhere; }
 .row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
 .directory-modal { width: min(680px, calc(100vw - 24px)); }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 12px; width: 100%; min-width: 0; }
+.form-grid > label, .form-grid > .form-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  line-height: 1.25;
+}
 .form-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .form-field label { font-weight: 600; line-height: 1.25; }
 .form-field input, .form-field select, .form-field textarea { width: 100%; min-width: 0; }
-.form-grid small { color: var(--color-muted); font-weight: 400; }
+.form-grid small { color: var(--color-muted); font-size: 11px; font-weight: 400; line-height: 1.35; overflow-wrap: anywhere; }
 .modal-actions { margin-top: 10px; padding-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-top: 1px solid var(--color-border); }
 .local-cleanup-note { margin: 0 0 8px; padding: 4px 7px; border: 1px solid var(--color-border); background: var(--color-panel-2); color: var(--color-muted); font-size: 11px; }
 .stats-grid { margin-bottom: 8px; display: grid; grid-template-columns: 1fr; border: 1px solid var(--color-border-strong); background: var(--color-border); gap: 1px; }
@@ -255,6 +264,14 @@ tbody tr:hover { background: #d8e7f3; }
 .review-modal { width: min(520px, calc(100vw - 24px)); }
 .review-modal-backdrop { z-index: 30; }
 .modal > .section-heading, .modal-header { position: sticky; top: -10px; z-index: 2; margin: -10px -10px 8px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; background: var(--color-toolbar); }
+.modal > .modal-actions, .modal > .modal-footer {
+  position: sticky;
+  bottom: -10px;
+  z-index: 2;
+  margin: 10px -10px -10px;
+  padding: 10px;
+  background: var(--color-panel);
+}
 .modal-body { min-width: 0; }
 .detail-grid { display: grid; margin: 0 0 8px; border: 1px solid var(--color-border); }
 .detail-grid div { grid-template-columns: minmax(130px, 35%) minmax(0, 1fr); }
@@ -269,8 +286,8 @@ tbody tr:hover { background: #d8e7f3; }
 .photo-grid { display: grid; gap: 8px; }
 figure { margin: 0; }
 figcaption { padding: 5px 7px; border: 1px solid var(--color-border); border-bottom: 0; background: var(--color-toolbar); font-weight: 600; }
-figure img, .no-photo { width: 100%; max-width: 100%; min-height: 120px; max-height: 280px; border: 1px solid var(--color-border); object-fit: contain; }
-.no-photo { display: grid; place-items: center; background: #e8f0f7; color: var(--color-muted); }
+figure img, .no-photo { width: 100%; max-width: 100%; min-height: 120px; max-height: 280px; aspect-ratio: 4 / 3; border: 1px solid var(--color-border); object-fit: contain; background: #fff; }
+.no-photo { display: grid; place-items: center; padding: 10px; background: #e8f0f7; color: var(--color-muted); text-align: center; overflow-wrap: anywhere; }
 .nested-table { margin-top: 8px; border: 1px solid var(--color-border); }
 .modal-section, .detail-section {
   width: 100%;
@@ -330,6 +347,204 @@ figure img, .no-photo { width: 100%; max-width: 100%; min-height: 120px; max-hei
 .print-totals { margin-top: 14px; display: grid; gap: 4px; }
 .print-totals p, .signature-block p { margin: 0; }
 .signature-block { margin-top: 28px; display: grid; gap: 14px; }
+
+@media (max-width: 720px) {
+  .table-card { overflow: visible; border: 0; background: transparent; }
+  .table-scroll {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+  .table-scroll .responsive-table {
+    min-width: 0;
+    display: block;
+    border-collapse: separate;
+    background: transparent;
+    font-size: 12px;
+  }
+  .responsive-table thead { display: none; }
+  .responsive-table tbody { display: grid; gap: 10px; }
+  .responsive-table tr {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--color-border-strong);
+    background: #fff;
+  }
+  .responsive-table tbody tr:nth-child(even) { background: #fff; }
+  .responsive-table tbody tr:hover { background: #fff; }
+  .responsive-table td {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(112px, 38%) minmax(0, 1fr);
+    gap: 8px;
+    align-items: start;
+    border: 0;
+    border-top: 1px solid var(--color-border);
+    padding: 8px;
+  }
+  .responsive-table td:first-child { border-top: 0; }
+  .responsive-table td::before {
+    color: var(--color-muted);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+  .responsive-table td.row-actions,
+  .responsive-table td:has(.row-actions),
+  .responsive-table td:has(.button-row) {
+    display: block;
+  }
+  .responsive-table td.row-actions::before,
+  .responsive-table td:has(.row-actions)::before,
+  .responsive-table td:has(.button-row)::before {
+    display: block;
+    margin-bottom: 6px;
+  }
+  .responsive-table .row-actions,
+  .responsive-table .table-actions,
+  .responsive-table .button-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .responsive-table .small-button,
+  .responsive-table .row-actions button,
+  .responsive-table .table-actions button {
+    width: 100%;
+    min-height: 40px;
+  }
+
+  .route-sheets-table td:nth-child(1)::before { content: "Дата"; }
+  .route-sheets-table td:nth-child(2)::before { content: "ПІБ"; }
+  .route-sheets-table td:nth-child(3)::before { content: "Номер жетона"; }
+  .route-sheets-table td:nth-child(4)::before { content: "УПП"; }
+  .route-sheets-table td:nth-child(5)::before { content: "Підрозділ"; }
+  .route-sheets-table td:nth-child(6)::before { content: "Екіпаж / підрозділ"; }
+  .route-sheets-table td:nth-child(7)::before { content: "Автомобіль"; }
+  .route-sheets-table td:nth-child(8)::before { content: "Початковий км"; }
+  .route-sheets-table td:nth-child(9)::before { content: "Кінцевий км"; }
+  .route-sheets-table td:nth-child(10)::before { content: "Пробіг"; }
+  .route-sheets-table td:nth-child(11)::before { content: "Заправка"; }
+  .route-sheets-table td:nth-child(12)::before { content: "Літри"; }
+  .route-sheets-table td:nth-child(13)::before { content: "Статус"; }
+  .route-sheets-table td:nth-child(14)::before { content: "Ручне внесення"; }
+  .route-sheets-table td:nth-child(15)::before { content: "Потребує перевірки"; }
+  .route-sheets-table td:nth-child(16)::before { content: "Час початку"; }
+  .route-sheets-table td:nth-child(17)::before { content: "Час завершення"; }
+  .route-sheets-table td:nth-child(18)::before { content: "Дії"; }
+
+  .monthly-sheets-table td:nth-child(1)::before { content: "Автомобіль"; }
+  .monthly-sheets-table td:nth-child(2)::before { content: "Номерний знак"; }
+  .monthly-sheets-table td:nth-child(3)::before { content: "УПП"; }
+  .monthly-sheets-table td:nth-child(4)::before { content: "Підрозділ"; }
+  .monthly-sheets-table td:nth-child(5)::before { content: "Місяць"; }
+  .monthly-sheets-table td:nth-child(6)::before { content: "Рік"; }
+  .monthly-sheets-table td:nth-child(7)::before { content: "Статус"; }
+  .monthly-sheets-table td:nth-child(8)::before { content: "Початковий км"; }
+  .monthly-sheets-table td:nth-child(9)::before { content: "Кінцевий км"; }
+  .monthly-sheets-table td:nth-child(10)::before { content: "Загальний пробіг"; }
+  .monthly-sheets-table td:nth-child(11)::before { content: "Загальна заправка, л"; }
+  .monthly-sheets-table td:nth-child(12)::before { content: "Кількість змін"; }
+  .monthly-sheets-table td:nth-child(13)::before { content: "Дії"; }
+
+  .audit-table td:nth-child(1)::before,
+  .department-audit-table td:nth-child(1)::before { content: "Дата/час"; }
+  .audit-table td:nth-child(2)::before,
+  .department-audit-table td:nth-child(2)::before { content: "Дія"; }
+  .audit-table td:nth-child(3)::before,
+  .department-audit-table td:nth-child(3)::before { content: "Тип сутності"; }
+  .audit-table td:nth-child(4)::before { content: "Номер жетона"; }
+  .audit-table td:nth-child(5)::before,
+  .department-audit-table td:nth-child(4)::before { content: "Деталі"; }
+
+  .monthly-entries-table td:nth-child(1)::before { content: "Дата"; }
+  .monthly-entries-table td:nth-child(2)::before { content: "Час початку"; }
+  .monthly-entries-table td:nth-child(3)::before { content: "Час завершення"; }
+  .monthly-entries-table td:nth-child(4)::before { content: "ПІБ патрульного"; }
+  .monthly-entries-table td:nth-child(5)::before { content: "Жетон"; }
+  .monthly-entries-table td:nth-child(6)::before { content: "Екіпаж / підрозділ"; }
+  .monthly-entries-table td:nth-child(7)::before { content: "Початковий км"; }
+  .monthly-entries-table td:nth-child(8)::before { content: "Кінцевий км"; }
+  .monthly-entries-table td:nth-child(9)::before { content: "Пробіг"; }
+  .monthly-entries-table td:nth-child(10)::before { content: "Заправка"; }
+  .monthly-entries-table td:nth-child(11)::before { content: "Літри"; }
+  .monthly-entries-table td:nth-child(12)::before { content: "Фото початку"; }
+  .monthly-entries-table td:nth-child(13)::before { content: "Фото завершення"; }
+  .monthly-entries-table td:nth-child(14)::before { content: "Примітка"; }
+  .monthly-entries-table td:nth-child(15)::before { content: "Статус"; }
+
+  .officers-table td:nth-child(1)::before { content: "Жетон"; }
+  .officers-table td:nth-child(2)::before { content: "ПІБ"; }
+  .officers-table td:nth-child(3)::before { content: "УПП"; }
+  .officers-table td:nth-child(4)::before { content: "Підрозділ"; }
+  .officers-table td:nth-child(5)::before { content: "Активний"; }
+  .officers-table td:nth-child(6)::before { content: "PIN встановлено"; }
+  .officers-table td:nth-child(7)::before { content: "Дата створення"; }
+  .officers-table td:nth-child(8)::before { content: "Дії"; }
+
+  .vehicles-table td:nth-child(1)::before { content: "Номерний знак"; }
+  .vehicles-table td:nth-child(2)::before { content: "Нормалізований номер"; }
+  .vehicles-table td:nth-child(3)::before { content: "Марка"; }
+  .vehicles-table td:nth-child(4)::before { content: "Модель"; }
+  .vehicles-table td:nth-child(5)::before { content: "УПП"; }
+  .vehicles-table td:nth-child(6)::before { content: "Підрозділ"; }
+  .vehicles-table td:nth-child(7)::before { content: "Активний"; }
+  .vehicles-table td:nth-child(8)::before { content: "Дата створення"; }
+  .vehicles-table td:nth-child(9)::before { content: "Дії"; }
+
+  .admin-users-table td:nth-child(1)::before { content: "Логін"; }
+  .admin-users-table td:nth-child(2)::before { content: "ПІБ"; }
+  .admin-users-table td:nth-child(3)::before { content: "Роль"; }
+  .admin-users-table td:nth-child(4)::before { content: "УПП"; }
+  .admin-users-table td:nth-child(5)::before { content: "Підрозділ"; }
+  .admin-users-table td:nth-child(6)::before { content: "Активний"; }
+  .admin-users-table td:nth-child(7)::before { content: "2FA"; }
+  .admin-users-table td:nth-child(8)::before { content: "Останній вхід"; }
+  .admin-users-table td:nth-child(9)::before { content: "Зміна пароля"; }
+  .admin-users-table td:nth-child(10)::before { content: "Тимчасовий пароль"; }
+  .admin-users-table td:nth-child(11)::before { content: "Заблоковано до"; }
+  .admin-users-table td:nth-child(12)::before { content: "Дії"; }
+
+  .departments-table td:nth-child(1)::before { content: "Назва управління"; }
+  .departments-table td:nth-child(2)::before { content: "Код"; }
+  .departments-table td:nth-child(3)::before { content: "Регіон"; }
+  .departments-table td:nth-child(4)::before { content: "Активне"; }
+  .departments-table td:nth-child(5)::before { content: "Підрозділів"; }
+  .departments-table td:nth-child(6)::before { content: "Авто"; }
+  .departments-table td:nth-child(7)::before { content: "Поліцейських"; }
+  .departments-table td:nth-child(8)::before { content: "Маршрутних листів"; }
+  .departments-table td:nth-child(9)::before { content: "Дії"; }
+
+  .department-units-table td:nth-child(1)::before { content: "Назва"; }
+  .department-units-table td:nth-child(2)::before { content: "Тип"; }
+  .department-units-table td:nth-child(3)::before { content: "Код"; }
+  .department-units-table td:nth-child(4)::before { content: "Активний"; }
+  .department-units-table td:nth-child(5)::before { content: "Автомобілі"; }
+  .department-units-table td:nth-child(6)::before { content: "Поліцейські"; }
+  .department-units-table td:nth-child(7)::before { content: "Маршрутні листи"; }
+  .department-units-table td:nth-child(8)::before { content: "Дії"; }
+
+  .department-vehicles-table td:nth-child(1)::before { content: "Автомобіль"; }
+  .department-vehicles-table td:nth-child(2)::before { content: "Номер"; }
+  .department-vehicles-table td:nth-child(3)::before { content: "Підрозділ"; }
+  .department-vehicles-table td:nth-child(4)::before { content: "Статус"; }
+  .department-officers-table td:nth-child(1)::before { content: "ПІБ"; }
+  .department-officers-table td:nth-child(2)::before { content: "Жетон"; }
+  .department-officers-table td:nth-child(3)::before { content: "Підрозділ"; }
+  .department-officers-table td:nth-child(4)::before { content: "Статус"; }
+  .department-routes-table td:nth-child(1)::before { content: "Дата"; }
+  .department-routes-table td:nth-child(2)::before { content: "Патрульний"; }
+  .department-routes-table td:nth-child(3)::before { content: "Автомобіль"; }
+  .department-routes-table td:nth-child(4)::before { content: "Пробіг"; }
+  .department-routes-table td:nth-child(5)::before { content: "Статус"; }
+
+  .transfer-history-table td:nth-child(1)::before { content: "Дата"; }
+  .transfer-history-table td:nth-child(2)::before { content: "Переміщення"; }
+  .transfer-history-table td:nth-child(3)::before { content: "Адміністратор"; }
+  .transfer-history-table td:nth-child(4)::before { content: "Коментар"; }
+}
 
 @media (min-width: 600px) {
   .system-meta { display: flex; }
