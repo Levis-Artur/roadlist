@@ -1,4 +1,3 @@
-import { clearPhotos, deleteExpiredPhotos } from '../storage/photoDb';
 import { apiUpload, getApiUrl } from './apiClient';
 
 interface UploadPhotoResponse {
@@ -28,13 +27,7 @@ export async function getOdometerPhoto(photoId: string): Promise<string | null> 
 }
 
 export async function deleteOdometerPhoto(photoId: string): Promise<void> {
-  if (photoId.startsWith('local:')) return;
-}
-
-export async function clearOdometerPhotos(): Promise<void> {
-  await clearPhotos();
-}
-
-export async function cleanupExpiredPhotos(): Promise<void> {
-  await deleteExpiredPhotos();
+  if (import.meta.env.DEV) {
+    console.info('[photoService] Видалення фото виконується на backend.', photoId);
+  }
 }

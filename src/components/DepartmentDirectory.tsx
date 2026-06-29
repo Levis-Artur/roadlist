@@ -245,7 +245,7 @@ export function DepartmentDirectory({ currentAdmin }: { currentAdmin: AdminUser 
               <td>{details.vehicles.filter((item) => inUnit(item, unit)).length}</td>
               <td>{details.officers.filter((item) => inUnit(item, unit)).length}</td>
               <td>{details.routeSheets.filter((item) => inUnit(item, unit)).length}</td>
-              <td><div className="table-actions">
+              <td className="action-cell"><div className="table-actions">
                 <button className="small-button" onClick={() => showUnitForm(unit)}>Переглянути</button>
                 {canEdit && <button className="small-button" onClick={() => showUnitForm(unit)}>Редагувати</button>}
                 {canEdit && unit.isActive && <button className="small-button danger-mini" onClick={() => void deactivateUnit(unit)}>Деактивувати</button>}

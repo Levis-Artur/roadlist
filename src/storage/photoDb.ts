@@ -13,7 +13,14 @@ interface PhotoRecord {
 
 let databasePromise: Promise<IDBDatabase> | undefined;
 
+function assertDevOnlyPhotoDb() {
+  if (import.meta.env.PROD) {
+    throw new Error('Локальне сховище фото вимкнене у production.');
+  }
+}
+
 export function initPhotoDb(): Promise<IDBDatabase> {
+  assertDevOnlyPhotoDb();
   if (databasePromise) return databasePromise;
   databasePromise = new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);

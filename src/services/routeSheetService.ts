@@ -147,7 +147,3 @@ export async function updateRouteSheetAdminComment(id: string, comment?: string 
   if (!routeSheet) throw new Error('Не вдалося зберегти коментар адміністратора.');
   return normalizeRouteSheet(routeSheet);
 }
-
-export async function clearRouteSheets(): Promise<void> {
-  localStorage.removeItem('patrol-route-sheets');
-}

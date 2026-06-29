@@ -41,7 +41,7 @@ nano .env.production
 
 Обов’язково змініть `POSTGRES_PASSWORD` і `JWT_SECRET`. Пароль у `DATABASE_URL` має точно збігатися з `POSTGRES_PASSWORD`; для URL використовуйте URL-encoded пароль, якщо він містить спеціальні символи.
 
-Реальний `.env.production` ігнорується Git і не повинен потрапляти в репозиторій. Не використовуйте seed-пароль `owner12345` або значення `CHANGE_ME...` на сервері. Для JWT створіть довгий випадковий секрет, наприклад:
+Реальний `.env.production` ігнорується Git і не повинен потрапляти в репозиторій. Не використовуйте тестові seed-облікові дані або значення `CHANGE_ME...` на сервері. Для JWT створіть довгий випадковий секрет, наприклад:
 
 ```bash
 openssl rand -hex 32
@@ -84,13 +84,17 @@ docker compose -f docker-compose.prod.yml --env-file .env.production up -d --bui
 docker compose -f docker-compose.prod.yml --env-file .env.production exec backend npx prisma migrate deploy
 ```
 
-Для першого тестового розгортання створіть seed-дані:
+Для production не запускайте тестовий seed: він відмовляється працювати з `NODE_ENV=production`. Першого системного власника створіть явними одноразовими env-змінними:
 
 ```bash
-docker compose -f docker-compose.prod.yml --env-file .env.production exec backend npm run prisma:seed
+docker compose -f docker-compose.prod.yml --env-file .env.production exec \
+  -e OWNER_USERNAME="owner.company" \
+  -e OWNER_FULL_NAME="Власник системи" \
+  -e OWNER_PASSWORD="Strong.Owner-2026!" \
+  backend npm run admin:create-owner
 ```
 
-Seed не потрібно повторювати при кожному оновленні production-сервера.
+Замініть приклад пароля на власний сильний пароль. Скрипт створює `SYSTEM_OWNER` із `mustChangePassword=true`, тому після першого входу потрібно змінити пароль і налаштувати 2FA. Для local/staging можна запускати `npm run db:reset:destructive`, але ця команда знищує всі дані підключеної бази і не повинна використовуватись у production.
 
 ## 6. Перевірка контейнерів
 

@@ -4,9 +4,9 @@ import { VehicleDirectory } from '../components/VehicleDirectory';
 import { AdminUsersDirectory } from '../components/AdminUsersDirectory';
 import { DepartmentDirectory } from '../components/DepartmentDirectory';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
-import { addAuditLog, clearAuditLogs, getAuditLogs } from '../services/auditService';
-import { clearOdometerPhotos, getOdometerPhoto } from '../services/photoService';
-import { clearRouteSheets, deleteRouteSheet, getRouteSheetById, getRouteSheets, markRouteSheetNeedsReview, updateRouteSheetAdminComment, verifyRouteSheet } from '../services/routeSheetService';
+import { getAuditLogs } from '../services/auditService';
+import { getOdometerPhoto } from '../services/photoService';
+import { deleteRouteSheet, getRouteSheetById, getRouteSheets, markRouteSheetNeedsReview, updateRouteSheetAdminComment, verifyRouteSheet } from '../services/routeSheetService';
 import { getOfficers } from '../services/officerService';
 import { getVehicles } from '../services/vehicleService';
 import {
@@ -220,30 +220,6 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
     activeVehicles: vehicles.filter((item) => item.isActive).length,
   }), [officers, routeSheets, vehicles]);
 
-  async function clearData() {
-    if (!window.confirm('Очистити локальні тестові дані цього браузера?')) return;
-    try {
-      await clearOdometerPhotos();
-      await clearRouteSheets();
-      await clearAuditLogs();
-      try {
-        await addAuditLog({ action: 'Тестові дані очищено', entityType: 'admin' });
-      } catch {
-        // Clearing test data must still complete if the audit log is unavailable.
-      }
-      setRouteSheets([]);
-      setMonthlyRouteSheets([]);
-      setAuditLogs([]);
-      setSelected(undefined);
-      setSelectedMonthly(undefined);
-      setPrintMonthly(undefined);
-    setAdminError('');
-    onLogout();
-    } catch {
-      setAdminError('Не вдалося зберегти дані. Перевірте налаштування браузера або очистіть тестові дані.');
-    }
-  }
-
   function updateRouteSheetInState(routeSheet: RouteSheet) {
     setRouteSheets((items) => items.map((item) => (item.id === routeSheet.id ? routeSheet : item)));
     setSelected(routeSheet);
@@ -406,7 +382,6 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
         <div className="admin-actions">
           {(section === 'route_sheets' || section === 'monthly_route_sheets' || section === 'audit') && <button type="button" className="secondary compact" onClick={() => void refreshData()} disabled={loading}>Оновити</button>}
           {section === 'route_sheets' && <button type="button" className="secondary compact" onClick={() => exportCsv(routeSheets)} disabled={!routeSheets.length}>Експорт CSV</button>}
-          {section === 'route_sheets' && <button type="button" className="danger-outline compact" onClick={() => void clearData()}>Очистити локальні тестові дані</button>}
           <button type="button" className="secondary compact" onClick={onLogout}>Вийти</button>
         </div>
       </section>
@@ -421,8 +396,6 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
         <button className={section === 'profile' ? 'active' : ''} onClick={() => setSection('profile')}>Мій профіль</button>
         <button className={section === 'audit' ? 'active' : ''} onClick={() => setSection('audit')}>Журнал дій</button>
       </nav>
-
-      {(section === 'route_sheets' || section === 'monthly_route_sheets') && <p className="local-cleanup-note">Очищає лише локальні тестові дані браузера. Записи backend не видаляються.</p>}
 
       {adminError && <p className="message error" role="alert">{adminError}</p>}
 
@@ -550,7 +523,7 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
                   <td>{item.totalDistanceKm}</td>
                   <td>{item.totalFuelLiters.toLocaleString('uk-UA')}</td>
                   <td>{item.shiftCount ?? item.shiftEntries?.length ?? 0}</td>
-                  <td>
+                  <td className="action-cell">
                     <div className="button-row compact-row">
                       <button type="button" className="small-button" onClick={() => void openMonthlyDetails(item.id)}>Переглянути</button>
                       <button type="button" className="small-button" onClick={() => void openMonthlyPrint(item.id)}>Друк</button>

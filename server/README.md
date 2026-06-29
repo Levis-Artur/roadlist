@@ -10,7 +10,7 @@ npm install
 cp .env.example .env
 docker compose up -d
 npx prisma generate
-npx prisma migrate dev --name init
+npm run prisma:migrate:dev
 npm run prisma:seed
 npm run dev
 ```
@@ -19,9 +19,56 @@ API працює на `http://localhost:4000`. Перевірка стану: `G
 
 ## Тестові дані
 
-Seed створює активних працівників із жетонами `0000001`, `0000002` і `0000003`. Номер жетона має формат рівно 7 цифр (`^\d{7}$`) і зберігається як рядок. Старі шестизначні тестові номери деактивуються. Звання в моделі немає.
+Seed створює активних тестових працівників із жетонами `0000001`–`0000005`. Номер жетона має формат рівно 7 цифр (`^\d{7}$`) і зберігається як рядок. Звання в моделі немає.
 
-Тестові PIN: `0000001 / 1111`, `0000002 / 2222`, `0000003 / 3333`. У `Officer` зберігається тільки bcrypt hash.
+Тестові PIN:
+
+- `0000001 / 240681`
+- `0000002 / 240682`
+- `0000003 / 240683`
+- `0000004 / 240684`
+- `0000005 / 240685`
+
+У `Officer` зберігається тільки bcrypt hash.
+
+Тестові адміністратори для local/staging:
+
+- `owner.test / Owner.Test-2026!`
+- `national.test / National.Test-2026!`
+- `volyn.admin / Regional.Volyn-2026!`
+- `lviv.admin / Regional.Lviv-2026!`
+
+Seed відмовляється працювати з `NODE_ENV=production`.
+
+## Clean reset local/staging
+
+> УВАГА: команда повністю очищає підключену базу даних, застосовує міграції і створює чистий тестовий набір даних.
+
+```bash
+npm run db:reset:destructive
+```
+
+Команда відмовляється працювати з `NODE_ENV=production`.
+
+Окремі команди:
+
+```bash
+npm run prisma:generate
+npm run prisma:migrate:dev
+npm run prisma:migrate:deploy
+npm run db:seed
+```
+
+Перший `SYSTEM_OWNER` без тестового seed:
+
+```bash
+OWNER_USERNAME="owner.company" \
+OWNER_FULL_NAME="Власник системи" \
+OWNER_PASSWORD="Strong.Owner-2026!" \
+npm run admin:create-owner
+```
+
+Скрипт не має default credentials. Якщо активний `SYSTEM_OWNER` уже існує, створення іншого буде заблоковано, доки явно не задано `OWNER_REPLACE=true`.
 
 ## Endpoints
 
@@ -40,7 +87,7 @@ Content-Type: application/json
 POST /api/officers/login
 Content-Type: application/json
 
-{"badgeNumber":"0000001","pin":"1111"}
+{"badgeNumber":"0000001","pin":"240681"}
 ```
 
 Відповідь містить JWT і публічні дані Officer без `pinHash`. `POST /api/officers/logout`, `POST /api/route-sheets/start` і `POST /api/route-sheets/finish` приймають `Authorization: Bearer TOKEN`. Start/finish ігнорують `badgeNumber` із body та використовують жетон із JWT.
@@ -139,7 +186,7 @@ DELETE /api/vehicles/:id
 POST /api/admin/login
 Content-Type: application/json
 
-{"username":"owner","password":"owner12345"}
+{"username":"owner.test","password":"Owner.Test-2026!"}
 ```
 
 ```http
@@ -147,7 +194,7 @@ GET /api/audit-logs
 Authorization: Bearer ADMIN_JWT
 ```
 
-Відповідь містить JWT, `mustChangePassword` і public-профіль адміністратора. Seed створює одного `SYSTEM_OWNER`: `owner / owner12345`. Цей пароль призначений лише для локального MVP/seed; owner створюється з `mustChangePassword=true`.
+Відповідь містить `temporaryToken`, ознаки `mustChangePassword` / `requiresTwoFactorSetup` і public-профіль адміністратора. Seed створює тестового `SYSTEM_OWNER`: `owner.test / Owner.Test-2026!`. Ці credentials призначені лише для local/staging; owner створюється з `mustChangePassword=true`.
 
 Ролі:
 
@@ -191,6 +238,6 @@ OFFICER_JWT_EXPIRES_IN="12h"
 
 У production `JWT_SECRET` обов’язково потрібно замінити на сильний секрет; сервер навмисно відмовляється стартувати з `CHANGE_ME_SECRET` у production mode.
 
-Seed створює трьох активних патрульних і один активний автомобіль: Hyundai Sonata з номером `АА5200МН` для відображення та нормалізованим `AA5200MH` для збереження й пошуку.
+Seed створює два тестові УПП, внутрішні підрозділи, тестових адміністраторів, п’ять активних патрульних і чотири активні службові автомобілі. Hyundai Sonata має номер `АА5200МН` для відображення та нормалізований `AA5200MH` для збереження й пошуку.
 
-Frontend підключений до цих endpoint-ів через власний service layer і має локальний MVP-fallback на випадок мережевої недоступності API.
+Frontend підключений до цих endpoint-ів через власний service layer. Якщо API недоступне, клієнт показує помилку і не створює production-критичні дані локально.

@@ -4,12 +4,19 @@ const STORAGE_KEY = 'patrol-route-sheets';
 
 type LegacyRouteSheet = RouteSheet & { startPhoto?: string; endPhoto?: string; rank?: string };
 
+function assertDevOnlyStorage() {
+  if (import.meta.env.PROD) {
+    throw new Error('Локальне сховище маршрутних листів вимкнене у production.');
+  }
+}
+
 function sanitizeRouteSheets(routeSheets: LegacyRouteSheet[]): RouteSheet[] {
   return routeSheets.map(({ startPhoto: _startPhoto, endPhoto: _endPhoto, rank: _rank, ...routeSheet }) => routeSheet);
 }
 
 export const routeSheetStorage = {
   getAll(): RouteSheet[] {
+    assertDevOnlyStorage();
     try {
       const value = localStorage.getItem(STORAGE_KEY);
       if (!value) return [];
@@ -30,6 +37,7 @@ export const routeSheetStorage = {
   },
 
   saveAll(routeSheets: RouteSheet[]): void {
+    assertDevOnlyStorage();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sanitizeRouteSheets(routeSheets as LegacyRouteSheet[])));
   },
 
@@ -42,6 +50,7 @@ export const routeSheetStorage = {
   },
 
   clear(): void {
+    assertDevOnlyStorage();
     localStorage.removeItem(STORAGE_KEY);
   },
 };

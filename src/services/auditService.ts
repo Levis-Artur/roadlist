@@ -9,7 +9,3 @@ export async function addAuditLog(input: AddAuditLogInput): Promise<void> {
 export async function getAuditLogs(): Promise<AuditLog[]> {
   return extractList<AuditLog>(await apiGet<unknown>('/api/audit-logs'), 'auditLogs');
 }
-
-export async function clearAuditLogs(): Promise<void> {
-  localStorage.removeItem('patrol-route-sheet-audit-logs');
-}

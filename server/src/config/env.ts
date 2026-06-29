@@ -20,7 +20,7 @@ function requiredInProduction(name: string): string | undefined {
 }
 
 function parseCorsOrigins(value: string | undefined): string[] {
-  if (!value?.trim()) {
+  if (!value?.trim() || (!isProduction && value.trim() === '*')) {
     return isProduction
       ? []
       : [

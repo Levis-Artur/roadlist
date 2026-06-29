@@ -4,7 +4,6 @@ import { ApiUnavailableError, apiDelete, apiGet, apiPatch, apiPost, getApiUrl } 
 const ADMIN_TOKEN_KEY = 'admin_token';
 const ADMIN_PENDING_TOKEN_KEY = 'admin_2fa_pending_token';
 const ADMIN_SESSION_KEY = 'admin_user';
-const LEGACY_AUTH_KEY = 'admin_authenticated';
 
 interface AdminLoginResponse {
   success: boolean;
@@ -36,7 +35,6 @@ export async function loginAdmin(username: string, password: string): Promise<Ad
   const response = await apiPost<AdminLoginResponse>('/api/admin/login', { username, password });
   if (response.temporaryToken) sessionStorage.setItem(ADMIN_PENDING_TOKEN_KEY, response.temporaryToken);
   if (response.token && response.admin) finishAdminLogin(response.token, response.admin);
-  sessionStorage.removeItem(LEGACY_AUTH_KEY);
   return response;
 }
 
@@ -57,7 +55,6 @@ export function logoutAdmin(): void {
   sessionStorage.removeItem(ADMIN_TOKEN_KEY);
   sessionStorage.removeItem(ADMIN_PENDING_TOKEN_KEY);
   sessionStorage.removeItem(ADMIN_SESSION_KEY);
-  sessionStorage.removeItem(LEGACY_AUTH_KEY);
 }
 
 export function isAdminAuthenticated(): boolean {
@@ -73,8 +70,8 @@ function pendingAuthorizationHeader() {
   return token ? { Authorization: `Bearer ${token}` } : undefined;
 }
 
-function safeHttpMessage(status: number, fallback: string, payload?: { message?: string }) {
-  return status >= 500 ? 'Помилка сервера. Спробуйте пізніше.' : payload?.message || fallback;
+function safeHttpMessage(status: number, defaultMessage: string, payload?: { message?: string }) {
+  return status >= 500 ? 'Помилка сервера. Спробуйте пізніше.' : payload?.message || defaultMessage;
 }
 
 export function getCurrentAdmin(): AdminUser | null {

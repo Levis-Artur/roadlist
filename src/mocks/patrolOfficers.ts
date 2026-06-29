@@ -1,5 +1,6 @@
 import type { Officer } from '../types';
 
+// Dev-only historical mock data. Runtime services must use the backend officer API.
 export const patrolOfficers: Officer[] = [
   {
     badgeNumber: '0000001',

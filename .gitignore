@@ -36,6 +36,13 @@ pnpm-debug.log*
 *.db
 *.sqlite
 *.sqlite3
+database.sql
+backup_*.sql
+*_backup.sql
+dump_*.sql
+*_dump.sql
+*.dump
+*.backup
 
 # uploads / user files
 server/uploads/*

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { OfficerCard } from '../components/OfficerCard';
 import { OdometerInput } from '../components/OdometerInput';
 import { getAuthenticatedOfficer, loginOfficer, logoutOfficer } from '../services/officerService';
@@ -25,6 +25,28 @@ export function PatrolPage() {
   const [loadingVehicles, setLoadingVehicles] = useState(false);
   const [refueled, setRefueled] = useState(false);
   const [fuelLiters, setFuelLiters] = useState('');
+
+  useEffect(() => {
+    if (!officer) return;
+    let active = true;
+    getActiveRouteSheetByOfficer(officer.badgeNumber)
+      .then((currentActiveSheet) => {
+        if (!active) return;
+        setActiveSheet(currentActiveSheet ?? undefined);
+        setError('');
+      })
+      .catch(() => {
+        if (!active) return;
+        void logoutOfficer().finally(() => {
+          if (!active) return;
+          setOfficer(undefined);
+          setFlow('idle');
+          setActiveSheet(undefined);
+          setError('Сесія завершилась. Увійдіть повторно.');
+        });
+      });
+    return () => { active = false; };
+  }, [officer]);
 
   async function checkBadge(event: React.FormEvent) {
     event.preventDefault();

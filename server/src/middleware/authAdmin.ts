@@ -27,7 +27,7 @@ export async function authAdmin(request: Request, response: Response, next: Next
     const payload = jwt.verify(token, env.jwtSecret) as jwt.JwtPayload & AdminTokenPayload;
     if (!payload.adminId || !payload.username || !isAdminRole(payload.role)) throw new Error('invalid token');
     const admin = await prisma.adminUser.findFirst({
-      where: { id: payload.adminId, isActive: true },
+      where: { id: payload.adminId, isActive: true, isDeleted: false },
       select: { id: true, username: true, role: true, department: true, unit: true, departmentId: true, departmentName: true, mustChangePassword: true, twoFactorEnabled: true },
     });
     if (!admin || admin.username !== payload.username || !isAdminRole(admin.role)) throw new Error('inactive admin');

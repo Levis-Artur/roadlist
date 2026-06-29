@@ -271,8 +271,9 @@ tbody tr:hover { background: #d8e7f3; }
   margin: 10px -10px -10px;
   padding: 10px;
   background: var(--color-panel);
+  box-shadow: 0 -1px 0 var(--color-border);
 }
-.modal-body { min-width: 0; }
+.modal-body { min-width: 0; padding-bottom: 2px; }
 .detail-grid { display: grid; margin: 0 0 8px; border: 1px solid var(--color-border); }
 .detail-grid div { grid-template-columns: minmax(130px, 35%) minmax(0, 1fr); }
 .detail-photos { padding-top: 8px; border-top: 1px solid var(--color-border); }
@@ -332,6 +333,8 @@ figure img, .no-photo { width: 100%; max-width: 100%; min-height: 120px; max-hei
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 .table-photo { width: 92px; min-height: 62px; }
 .table-photo img, .table-photo .no-photo { min-height: 62px; max-height: 62px; font-size: 10px; }
+.danger-modal p { overflow-wrap: anywhere; }
+.danger-modal textarea { min-height: 96px; }
 .print-modal { width: min(1120px, calc(100vw - 24px)); }
 .print-page { padding: 22px; background: #fff; color: #000; }
 .print-header { text-align: center; margin-bottom: 16px; }
@@ -392,13 +395,11 @@ figure img, .no-photo { width: 100%; max-width: 100%; min-height: 120px; max-hei
     overflow-wrap: anywhere;
   }
   .responsive-table td.row-actions,
-  .responsive-table td:has(.row-actions),
-  .responsive-table td:has(.button-row) {
+  .responsive-table td.action-cell {
     display: block;
   }
   .responsive-table td.row-actions::before,
-  .responsive-table td:has(.row-actions)::before,
-  .responsive-table td:has(.button-row)::before {
+  .responsive-table td.action-cell::before {
     display: block;
     margin-bottom: 6px;
   }
@@ -414,6 +415,16 @@ figure img, .no-photo { width: 100%; max-width: 100%; min-height: 120px; max-hei
   .responsive-table .table-actions button {
     width: 100%;
     min-height: 40px;
+  }
+  .responsive-table .table-photo {
+    width: 100%;
+    min-height: 120px;
+  }
+  .responsive-table .table-photo img,
+  .responsive-table .table-photo .no-photo {
+    min-height: 120px;
+    max-height: 220px;
+    font-size: 11px;
   }
 
   .route-sheets-table td:nth-child(1)::before { content: "Дата"; }
