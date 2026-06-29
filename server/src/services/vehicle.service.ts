@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { FuelType, Prisma } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
 import { AppError } from '../middleware/errorHandler.js';
 import type { AdminTokenPayload, RequestMetadata } from '../types/index.js';
@@ -8,6 +8,14 @@ import { assertDepartmentScope, resolveDepartmentAssignment } from './organizati
 import { canIncludeDeleted, deletionAuditMetadata, deletionPayload } from './softDelete.service.js';
 
 const FOREIGN_DEPARTMENT_MESSAGE = 'Недостатньо прав для доступу до даних іншого управління';
+const fuelTypeLabels: Record<FuelType, string> = {
+  PETROL: 'Бензин',
+  DIESEL: 'Дизель',
+  LPG: 'Газ',
+  HYBRID: 'Гібрид',
+  ELECTRIC: 'Електро',
+  OTHER: 'Інше',
+};
 
 function required(value: unknown, message: string): string {
   if (typeof value !== 'string' || !value.trim()) throw new AppError(message, 400);
@@ -16,6 +24,49 @@ function required(value: unknown, message: string): string {
 
 function optionalText(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function optionalNumber(value: unknown, fieldName: string, max: number): number | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  const numberValue = Number(value);
+  if (!Number.isFinite(numberValue)) {
+    throw new AppError(`${fieldName} має бути числом.`, 400);
+  }
+  if (numberValue < 0) {
+    throw new AppError(`${fieldName} не може бути від’ємним.`, 400);
+  }
+  if (numberValue > max) {
+    throw new AppError(`${fieldName} має бути в межах 0–${max}.`, 400);
+  }
+  return numberValue;
+}
+
+function optionalFuelType(value: unknown): FuelType | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  if (typeof value !== 'string' || !Object.values(FuelType).includes(value as FuelType)) {
+    throw new AppError('Оберіть коректний тип пального.', 400);
+  }
+  return value as FuelType;
+}
+
+function fuelPayload(input: Record<string, unknown>, current?: {
+  fuelTankCapacityLiters: number | null;
+  initialFuelLiters: number | null;
+}) {
+  const fuelType = optionalFuelType(input.fuelType);
+  const fuelConsumptionPer100Km = optionalNumber(input.fuelConsumptionPer100Km, 'Норма витрати пального', 100);
+  const fuelTankCapacityLiters = optionalNumber(input.fuelTankCapacityLiters, 'Об’єм бака', 300);
+  const initialFuelLiters = optionalNumber(input.initialFuelLiters, 'Початковий залишок пального', 300);
+
+  const nextTankCapacity = fuelTankCapacityLiters === undefined ? current?.fuelTankCapacityLiters ?? null : fuelTankCapacityLiters;
+  const nextInitialFuel = initialFuelLiters === undefined ? current?.initialFuelLiters ?? null : initialFuelLiters;
+  if (nextTankCapacity !== null && nextInitialFuel !== null && nextInitialFuel > nextTankCapacity) {
+    throw new AppError('Початковий залишок пального не може перевищувати об’єм бака.', 400);
+  }
+
+  return { fuelType, fuelConsumptionPer100Km, fuelTankCapacityLiters, initialFuelLiters };
 }
 
 function uniqueVehicleError(error: unknown): never {
@@ -112,11 +163,12 @@ export async function createVehicle(input: Record<string, unknown>, metadata: Re
   const brand = required(input.brand, 'Марка обов’язкова.');
   const model = required(input.model, 'Модель обов’язкова.');
   const assignment = await resolveDepartmentAssignment(input, actor);
+  const fuel = fuelPayload(input);
   try {
     const vehicle = await prisma.vehicle.create({
-      data: { plateNumber, displayPlateNumber, brand, model, ...assignment, isActive: input.isActive !== false },
+      data: { plateNumber, displayPlateNumber, brand, model, ...fuel, ...assignment, isActive: input.isActive !== false },
     });
-    await createAuditLog({ action: 'Створено автомобіль', entityType: 'vehicle', entityId: vehicle.id, details: `${plateNumber}; ${brand} ${model}`, targetDepartment: vehicle.department, targetDepartmentId: vehicle.departmentId, targetUnit: vehicle.unit, ...metadata });
+    await createAuditLog({ action: 'Створено автомобіль', entityType: 'vehicle', entityId: vehicle.id, details: `${plateNumber}; ${brand} ${model}; пальне: ${vehicle.fuelType ? fuelTypeLabels[vehicle.fuelType] : 'не вказано'}`, targetDepartment: vehicle.department, targetDepartmentId: vehicle.departmentId, targetUnit: vehicle.unit, ...metadata });
     return vehicle;
   } catch (error) { uniqueVehicleError(error); }
 }
@@ -132,6 +184,7 @@ export async function updateVehicle(id: string, input: Record<string, unknown>, 
   const assignment = input.department === undefined && input.departmentId === undefined && input.departmentName === undefined && input.unit === undefined && input.departmentUnitId === undefined && input.departmentUnitName === undefined
     ? {}
     : await resolveDepartmentAssignment({ department: current.department, departmentId: current.departmentId, departmentName: current.departmentName, departmentUnitId: current.departmentUnitId, departmentUnitName: current.departmentUnitName, unit: current.unit, ...input }, actor);
+  const fuel = fuelPayload(input, current);
   try {
     const vehicle = await prisma.vehicle.update({
       where: { id },
@@ -140,11 +193,12 @@ export async function updateVehicle(id: string, input: Record<string, unknown>, 
         displayPlateNumber,
         brand: input.brand === undefined ? undefined : required(input.brand, 'Марка обов’язкова.'),
         model: input.model === undefined ? undefined : required(input.model, 'Модель обов’язкова.'),
+        ...fuel,
         ...assignment,
         isActive: input.isActive === undefined ? undefined : Boolean(input.isActive),
       },
     });
-    await createAuditLog({ action: 'Оновлено автомобіль', entityType: 'vehicle', entityId: id, details: `${plateNumber}; ${vehicle.brand} ${vehicle.model}`, targetDepartment: vehicle.department, targetUnit: vehicle.unit, ...metadata });
+    await createAuditLog({ action: 'Оновлено автомобіль', entityType: 'vehicle', entityId: id, details: `${plateNumber}; ${vehicle.brand} ${vehicle.model}; пальне: ${vehicle.fuelType ? fuelTypeLabels[vehicle.fuelType] : 'не вказано'}, норма: ${vehicle.fuelConsumptionPer100Km ?? '—'} л/100 км, бак: ${vehicle.fuelTankCapacityLiters ?? '—'} л, початковий залишок: ${vehicle.initialFuelLiters ?? '—'} л`, targetDepartment: vehicle.department, targetUnit: vehicle.unit, ...metadata });
     return vehicle;
   } catch (error) { uniqueVehicleError(error); }
 }

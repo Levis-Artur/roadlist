@@ -70,6 +70,10 @@ export interface Vehicle {
   displayPlateNumber?: string;
   brand: string;
   model: string;
+  fuelType?: FuelType | null;
+  fuelConsumptionPer100Km?: number | null;
+  fuelTankCapacityLiters?: number | null;
+  initialFuelLiters?: number | null;
   department: string;
   unit?: string | null;
   departmentId?: string | null;
@@ -97,7 +101,8 @@ export interface VehicleAvailability {
 }
 
 export interface VehicleFilters { search?: string; department?: string; unit?: string; departmentId?: string; departmentUnitId?: string; isActive?: boolean }
-export interface CreateVehicleInput { displayPlateNumber: string; brand: string; model: string; department: string; unit?: string | null; departmentId?: string | null; departmentName?: string | null; departmentUnitId?: string | null; departmentUnitName?: string | null; isActive: boolean }
+export type FuelType = 'PETROL' | 'DIESEL' | 'LPG' | 'HYBRID' | 'ELECTRIC' | 'OTHER';
+export interface CreateVehicleInput { displayPlateNumber: string; brand: string; model: string; fuelType?: FuelType | null; fuelConsumptionPer100Km?: number | null; fuelTankCapacityLiters?: number | null; initialFuelLiters?: number | null; department: string; unit?: string | null; departmentId?: string | null; departmentName?: string | null; departmentUnitId?: string | null; departmentUnitName?: string | null; isActive: boolean }
 export type UpdateVehicleInput = Partial<CreateVehicleInput>;
 
 export interface VehicleTransferHistory {
@@ -228,10 +233,22 @@ export interface MonthlyRouteSheet {
   archivedAt?: string | null;
   adminCheckedBy?: string | null;
   adminComment?: string | null;
+  fuelSummary?: MonthlyFuelSummary;
   shiftCount?: number;
   shiftEntries?: RouteSheet[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface MonthlyFuelSummary {
+  totalDistanceKm: number;
+  totalRefueledLiters: number;
+  fuelConsumptionPer100Km: number | null;
+  fuelTankCapacityLiters: number | null;
+  estimatedFuelUsedLiters: number | null;
+  initialFuelLiters: number | null;
+  estimatedFuelBalanceLiters: number | null;
+  fuelWarnings: string[];
 }
 
 export interface MonthlyRouteSheetFilters {

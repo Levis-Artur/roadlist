@@ -53,6 +53,14 @@ function formatDate(value?: string, dateOnly = false) {
     : { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
 }
 
+function formatLiters(value?: number | null) {
+  return value === null || value === undefined ? '—' : `${value.toLocaleString('uk-UA', { minimumFractionDigits: 0, maximumFractionDigits: 1 })} л`;
+}
+
+function formatConsumption(value?: number | null) {
+  return value === null || value === undefined ? '—' : `${value.toLocaleString('uk-UA', { minimumFractionDigits: 0, maximumFractionDigits: 1 })} л/100 км`;
+}
+
 function isCrossMonthShift(entry: RouteSheet): boolean {
   if (!entry.endedAt) return false;
   const startedAt = new Date(entry.startedAt);
@@ -656,6 +664,19 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
               <DetailItem label="Сумарна заправка" value={`${selectedMonthly.totalFuelLiters.toLocaleString('uk-UA')} л`} />
               <DetailItem label="Статус" value={<span className={`status ${selectedMonthly.status}`}>{monthlyStatusLabels[selectedMonthly.status] ?? selectedMonthly.status}</span>} />
             </dl>
+            <section className="fuel-accounting-card">
+              <div className="section-heading inline-heading"><div><span className="eyebrow">Автомобіль</span><h3>Облік пального</h3></div></div>
+              <dl className="detail-grid">
+                <DetailItem label="Початковий залишок" value={formatLiters(selectedMonthly.fuelSummary?.initialFuelLiters)} />
+                <DetailItem label="Заправлено за місяць" value={formatLiters(selectedMonthly.fuelSummary?.totalRefueledLiters ?? selectedMonthly.totalFuelLiters)} />
+                <DetailItem label="Пробіг за місяць" value={`${selectedMonthly.fuelSummary?.totalDistanceKm ?? selectedMonthly.totalDistanceKm} км`} />
+                <DetailItem label="Норма витрати" value={formatConsumption(selectedMonthly.fuelSummary?.fuelConsumptionPer100Km)} />
+                <DetailItem label="Обʼєм бака" value={formatLiters(selectedMonthly.fuelSummary?.fuelTankCapacityLiters)} />
+                <DetailItem label="Розрахункова витрата" value={formatLiters(selectedMonthly.fuelSummary?.estimatedFuelUsedLiters)} />
+                <DetailItem label="Розрахунковий залишок" value={formatLiters(selectedMonthly.fuelSummary?.estimatedFuelBalanceLiters)} />
+              </dl>
+              {!!selectedMonthly.fuelSummary?.fuelWarnings.length && <div className="message warning" role="status">{selectedMonthly.fuelSummary.fuelWarnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}
+            </section>
             <div className="button-row compact-row">
               <button type="button" className="small-button" onClick={() => void openMonthlyPrint(selectedMonthly.id)}>Друк</button>
               {selectedMonthly.status === 'closed' ? (
@@ -732,6 +753,17 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
                 <p>Загальна кількість літрів заправки: <strong>{printMonthly.totalFuelLiters.toLocaleString('uk-UA')} л</strong></p>
                 <p>Кількість змін: <strong>{printMonthly.shiftEntries?.length ?? printMonthly.shiftCount ?? 0}</strong></p>
               </section>
+              <section className="print-totals">
+                <p><strong>Облік пального</strong></p>
+                <p>Початковий залишок: <strong>{formatLiters(printMonthly.fuelSummary?.initialFuelLiters)}</strong></p>
+                <p>Заправлено за місяць: <strong>{formatLiters(printMonthly.fuelSummary?.totalRefueledLiters ?? printMonthly.totalFuelLiters)}</strong></p>
+                <p>Пробіг за місяць: <strong>{printMonthly.fuelSummary?.totalDistanceKm ?? printMonthly.totalDistanceKm} км</strong></p>
+                <p>Норма витрати: <strong>{formatConsumption(printMonthly.fuelSummary?.fuelConsumptionPer100Km)}</strong></p>
+                <p>Обʼєм бака: <strong>{formatLiters(printMonthly.fuelSummary?.fuelTankCapacityLiters)}</strong></p>
+                <p>Розрахункова витрата: <strong>{formatLiters(printMonthly.fuelSummary?.estimatedFuelUsedLiters)}</strong></p>
+                <p>Розрахунковий залишок: <strong>{formatLiters(printMonthly.fuelSummary?.estimatedFuelBalanceLiters)}</strong></p>
+              </section>
+              {!!printMonthly.fuelSummary?.fuelWarnings.length && <section className="print-totals"><p><strong>Попередження щодо пального:</strong></p>{printMonthly.fuelSummary.fuelWarnings.map((warning) => <p key={warning}>{warning}</p>)}</section>}
               <section className="signature-block">
                 <p>Кінцевий кілометраж звірено: ______________________</p>
                 <p>Адміністратор: ______________________</p>

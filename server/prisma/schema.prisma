@@ -77,6 +77,10 @@ model Vehicle {
   displayPlateNumber String?
   brand              String
   model              String
+  fuelType           FuelType?
+  fuelConsumptionPer100Km Float?
+  fuelTankCapacityLiters  Float?
+  initialFuelLiters       Float?
   department         String
   unit               String?
   departmentId       String?
@@ -97,6 +101,15 @@ model Vehicle {
   @@index([department, isActive])
   @@index([departmentId, isActive])
   @@index([departmentUnitId, isActive])
+}
+
+enum FuelType {
+  PETROL
+  DIESEL
+  LPG
+  HYBRID
+  ELECTRIC
+  OTHER
 }
 
 model VehicleTransferHistory {

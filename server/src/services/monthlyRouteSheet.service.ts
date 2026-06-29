@@ -47,26 +47,86 @@ function withShiftCount<T extends { _count?: { shiftEntries: number } }>(item: T
   return { ...rest, shiftCount: _count?.shiftEntries ?? 0 };
 }
 
+function buildFuelSummary(item: {
+  totalDistanceKm: number;
+  totalFuelLiters: number;
+  vehicle?: {
+    fuelConsumptionPer100Km: number | null;
+    fuelTankCapacityLiters: number | null;
+    initialFuelLiters: number | null;
+  } | null;
+}) {
+  const fuelWarnings: string[] = [];
+  const fuelConsumptionPer100Km = item.vehicle?.fuelConsumptionPer100Km ?? null;
+  const initialFuelLiters = item.vehicle?.initialFuelLiters ?? null;
+  const fuelTankCapacityLiters = item.vehicle?.fuelTankCapacityLiters ?? null;
+  const totalDistanceKm = item.totalDistanceKm;
+  const totalRefueledLiters = item.totalFuelLiters;
+  const hasRequiredFuelData = fuelConsumptionPer100Km !== null && initialFuelLiters !== null && fuelTankCapacityLiters !== null;
+
+  if (!hasRequiredFuelData) {
+    fuelWarnings.push('Для цього автомобіля не вказані дані для розрахунку пального.');
+  }
+
+  const estimatedFuelUsedLiters = fuelConsumptionPer100Km === null
+    ? null
+    : totalDistanceKm * fuelConsumptionPer100Km / 100;
+  const estimatedFuelBalanceLiters = initialFuelLiters === null || estimatedFuelUsedLiters === null
+    ? null
+    : initialFuelLiters + totalRefueledLiters - estimatedFuelUsedLiters;
+
+  if (estimatedFuelBalanceLiters !== null && estimatedFuelBalanceLiters < 0) {
+    fuelWarnings.push('Розрахунковий залишок пального менше 0 л. Перевірте початковий залишок, заправки або показники одометра.');
+  }
+  if (estimatedFuelBalanceLiters !== null && fuelTankCapacityLiters !== null && estimatedFuelBalanceLiters > fuelTankCapacityLiters) {
+    fuelWarnings.push('Розрахунковий залишок пального перевищує обʼєм бака. Перевірте внесені заправки або початковий залишок.');
+  }
+
+  return {
+    totalDistanceKm,
+    totalRefueledLiters,
+    fuelConsumptionPer100Km,
+    fuelTankCapacityLiters,
+    estimatedFuelUsedLiters,
+    initialFuelLiters,
+    estimatedFuelBalanceLiters,
+    fuelWarnings,
+  };
+}
+
+function withMonthlyComputedData<T extends { _count?: { shiftEntries: number }; totalDistanceKm: number; totalFuelLiters: number; vehicle?: {
+  fuelConsumptionPer100Km: number | null;
+  fuelTankCapacityLiters: number | null;
+  initialFuelLiters: number | null;
+} | null }>(item: T) {
+  const { vehicle: _vehicle, ...rest } = item;
+  return { ...withShiftCount(rest), fuelSummary: buildFuelSummary(item) };
+}
+
 export async function listMonthlyRouteSheets(filters: MonthlyRouteSheetFilters = {}, actor?: AdminTokenPayload) {
   const items = await prisma.vehicleMonthlyRouteSheet.findMany({
     where: monthlyWhere(filters, actor),
-    include: { _count: { select: { shiftEntries: true } } },
+    include: {
+      vehicle: { select: { fuelConsumptionPer100Km: true, fuelTankCapacityLiters: true, initialFuelLiters: true } },
+      _count: { select: { shiftEntries: true } },
+    },
     orderBy: [{ year: 'desc' }, { month: 'desc' }, { vehicleBrand: 'asc' }, { vehicleModel: 'asc' }],
   });
-  return items.map(withShiftCount);
+  return items.map(withMonthlyComputedData);
 }
 
 export async function getMonthlyRouteSheet(id: string, actor?: AdminTokenPayload) {
   const item = await prisma.vehicleMonthlyRouteSheet.findUnique({
     where: { id },
     include: {
+      vehicle: { select: { fuelConsumptionPer100Km: true, fuelTankCapacityLiters: true, initialFuelLiters: true } },
       shiftEntries: { where: { isDeleted: false }, orderBy: [{ startedAt: 'asc' }, { createdAt: 'asc' }] },
       _count: { select: { shiftEntries: true } },
     },
   });
   if (!item || (item.isDeleted && actor?.role !== 'SYSTEM_OWNER')) throw new AppError('Місячний маршрутний лист не знайдено.', 404);
   assertDepartmentScope(actor, item);
-  return withShiftCount(item);
+  return withMonthlyComputedData(item);
 }
 
 export async function closeMonthlyRouteSheet(id: string, metadata: RequestMetadata = {}, actor?: AdminTokenPayload) {

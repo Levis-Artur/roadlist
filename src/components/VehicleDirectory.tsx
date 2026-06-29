@@ -3,7 +3,7 @@ import { DEPARTMENTS } from '../constants/departments';
 import { createVehicle, deactivateVehicle, getVehicleTransferHistory, getVehicles, transferVehicle, updateVehicle } from '../services/vehicleService';
 import { getDepartments, getDepartmentUnits } from '../services/organizationService';
 import { canDeleteRecords } from '../services/adminService';
-import type { AdminUser, CreateVehicleInput, Department, DepartmentUnit, Vehicle, VehicleTransferHistory } from '../types';
+import type { AdminUser, CreateVehicleInput, Department, DepartmentUnit, FuelType, Vehicle, VehicleTransferHistory } from '../types';
 import { normalizeVehicleNumber } from '../utils/vehicleNumber';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 
@@ -12,6 +12,10 @@ function defaultForm(currentAdmin: AdminUser): CreateVehicleInput {
     displayPlateNumber: '',
     brand: '',
     model: '',
+    fuelType: null,
+    fuelConsumptionPer100Km: null,
+    fuelTankCapacityLiters: null,
+    initialFuelLiters: null,
     department: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.department || '' : DEPARTMENTS[0],
     unit: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.unit || '' : '',
     departmentId: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.departmentId || null : null,
@@ -22,14 +26,39 @@ function defaultForm(currentAdmin: AdminUser): CreateVehicleInput {
   };
 }
 
+const fuelTypeLabels: Record<FuelType, string> = {
+  PETROL: 'Бензин',
+  DIESEL: 'Дизель',
+  LPG: 'Газ',
+  HYBRID: 'Гібрид',
+  ELECTRIC: 'Електро',
+  OTHER: 'Інше',
+};
+
+function numberOrNull(value: string): number | null {
+  return value.trim() ? Number(value) : null;
+}
+
+function formatLiters(value?: number | null) {
+  return value === null || value === undefined ? '—' : `${value.toLocaleString('uk-UA', { minimumFractionDigits: 0, maximumFractionDigits: 1 })} л`;
+}
+
+function formatConsumption(value?: number | null) {
+  return value === null || value === undefined ? '—' : `${value.toLocaleString('uk-UA', { minimumFractionDigits: 0, maximumFractionDigits: 1 })} л/100 км`;
+}
+
 function downloadCsv(items: Vehicle[]) {
   const rows = [
-    ['Номерний знак', 'Нормалізований номер', 'Марка', 'Модель', 'УПП', 'Підрозділ', 'Активний', 'Дата створення'],
+    ['Номерний знак', 'Нормалізований номер', 'Марка', 'Модель', 'Тип пального', 'Витрата л/100 км', 'Об’єм бака, л', 'Початковий залишок, л', 'УПП', 'Підрозділ', 'Активний', 'Дата створення'],
     ...items.map((item) => [
       item.displayPlateNumber ?? item.plateNumber,
       item.plateNumber,
       item.brand,
       item.model,
+      item.fuelType ? fuelTypeLabels[item.fuelType] : '',
+      item.fuelConsumptionPer100Km ?? '',
+      item.fuelTankCapacityLiters ?? '',
+      item.initialFuelLiters ?? '',
       item.department,
       item.unit || '',
       item.isActive ? 'Так' : 'Ні',
@@ -43,6 +72,15 @@ function downloadCsv(items: Vehicle[]) {
   link.download = 'vehicles-export.csv';
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function VehicleFuelInfo({ item }: { item: Vehicle }) {
+  return <div className="fuel-info">
+    <span><b>Тип:</b> {item.fuelType ? fuelTypeLabels[item.fuelType] : '—'}</span>
+    <span><b>Норма:</b> {formatConsumption(item.fuelConsumptionPer100Km)}</span>
+    <span><b>Бак:</b> {formatLiters(item.fuelTankCapacityLiters)}</span>
+    <span><b>Залишок:</b> {formatLiters(item.initialFuelLiters)}</span>
+  </div>;
 }
 
 function formatTransfer(item: VehicleTransferHistory) {
@@ -140,6 +178,10 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
       displayPlateNumber: item.displayPlateNumber ?? item.plateNumber,
       brand: item.brand,
       model: item.model,
+      fuelType: item.fuelType ?? null,
+      fuelConsumptionPer100Km: item.fuelConsumptionPer100Km ?? null,
+      fuelTankCapacityLiters: item.fuelTankCapacityLiters ?? null,
+      initialFuelLiters: item.initialFuelLiters ?? null,
       department: isRegional ? currentAdmin.department || item.department : item.department,
       unit: item.unit || '',
       departmentId: isRegional ? currentAdmin.departmentId || item.departmentId || null : item.departmentId || null,
@@ -165,6 +207,27 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
     };
     if (!payload.displayPlateNumber.trim() || !payload.brand.trim() || !payload.model.trim() || !payload.department.trim()) {
       setError('Заповніть номерний знак, марку, модель та УПП.');
+      return;
+    }
+    const numericFuelFields = [
+      { label: 'Норма витрати', value: payload.fuelConsumptionPer100Km, max: 100 },
+      { label: 'Обʼєм бака', value: payload.fuelTankCapacityLiters, max: 300 },
+      { label: 'Початковий залишок пального', value: payload.initialFuelLiters, max: 300 },
+    ];
+    for (const field of numericFuelFields) {
+      if (field.value !== null && field.value !== undefined && (!Number.isFinite(field.value) || field.value < 0)) {
+        setError(`${field.label} має бути числом 0 або більше.`);
+        return;
+      }
+      if (field.value !== null && field.value !== undefined && field.value > field.max) {
+        setError(`${field.label} має бути в межах 0–${field.max}.`);
+        return;
+      }
+    }
+    if (payload.fuelTankCapacityLiters !== null && payload.fuelTankCapacityLiters !== undefined
+      && payload.initialFuelLiters !== null && payload.initialFuelLiters !== undefined
+      && payload.initialFuelLiters > payload.fuelTankCapacityLiters) {
+      setError('Початковий залишок пального не може перевищувати обʼєм бака.');
       return;
     }
     try {
@@ -242,7 +305,7 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
 
     {error && <p className="message error" role="alert">{error}</p>}
 
-    {loading ? <div className="empty-state compact-empty">Завантаження…</div> : !items.length ? <div className="empty-state compact-empty"><p>Автомобілів ще не додано.</p></div> : !filtered.length ? <div className="empty-state compact-empty"><p>Автомобілів за вибраними фільтрами не знайдено.</p></div> : <div className="table-card"><div className="table-scroll"><table className="responsive-table vehicles-table"><thead><tr><th>Номерний знак</th><th>Нормалізований номер</th><th>Марка</th><th>Модель</th><th>УПП</th><th>Підрозділ</th><th>Активний</th><th>Дата створення</th><th>Дії</th></tr></thead><tbody>{filtered.map((item) => <tr key={item.id}><td>{item.displayPlateNumber ?? item.plateNumber}</td><td>{item.plateNumber}</td><td>{item.brand}</td><td>{item.model}</td><td>{item.department}</td><td>{item.unit || '—'}</td><td><span className={`status ${item.isActive ? 'completed' : 'needs_review'}`}>{item.isActive ? 'Так' : 'Ні'}</span></td><td>{item.createdAt ? new Date(item.createdAt).toLocaleString('uk-UA') : '—'}</td><td className="row-actions"><button className="small-button" onClick={() => showForm(item)}>Редагувати</button>{canTransfer && <button className="small-button" onClick={() => openTransfer(item)}>Перемістити</button>}<button className="small-button secondary" onClick={() => void showHistory(item)}>Історія</button>{canDelete && item.isActive && <button className="small-button danger-outline" onClick={() => setDeleteTarget(item)}>Видалити</button>}</td></tr>)}</tbody></table></div></div>}
+    {loading ? <div className="empty-state compact-empty">Завантаження…</div> : !items.length ? <div className="empty-state compact-empty"><p>Автомобілів ще не додано.</p></div> : !filtered.length ? <div className="empty-state compact-empty"><p>Автомобілів за вибраними фільтрами не знайдено.</p></div> : <div className="table-card"><div className="table-scroll"><table className="responsive-table vehicles-table"><thead><tr><th>Номерний знак</th><th>Нормалізований номер</th><th>Марка</th><th>Модель</th><th>Пальне</th><th>УПП</th><th>Підрозділ</th><th>Активний</th><th>Дата створення</th><th>Дії</th></tr></thead><tbody>{filtered.map((item) => <tr key={item.id}><td>{item.displayPlateNumber ?? item.plateNumber}</td><td>{item.plateNumber}</td><td>{item.brand}</td><td>{item.model}</td><td><VehicleFuelInfo item={item} /></td><td>{item.department}</td><td>{item.unit || '—'}</td><td><span className={`status ${item.isActive ? 'completed' : 'needs_review'}`}>{item.isActive ? 'Так' : 'Ні'}</span></td><td>{item.createdAt ? new Date(item.createdAt).toLocaleString('uk-UA') : '—'}</td><td className="row-actions"><button className="small-button" onClick={() => showForm(item)}>Редагувати</button>{canTransfer && <button className="small-button" onClick={() => openTransfer(item)}>Перемістити</button>}<button className="small-button secondary" onClick={() => void showHistory(item)}>Історія</button>{canDelete && item.isActive && <button className="small-button danger-outline" onClick={() => setDeleteTarget(item)}>Видалити</button>}</td></tr>)}</tbody></table></div></div>}
 
     {open && <div className="modal-backdrop" onMouseDown={() => setOpen(false)}><form className="modal directory-modal" onSubmit={save} onMouseDown={(event) => event.stopPropagation()}>
       <div className="section-heading"><h2>{editing ? 'Редагування автомобіля' : 'Новий автомобіль'}</h2><button type="button" className="text-button" onClick={() => setOpen(false)}>Закрити</button></div>
@@ -251,6 +314,10 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
         <label>Номерний знак для відображення<input value={form.displayPlateNumber} onChange={(event) => setForm({ ...form, displayPlateNumber: event.target.value })} placeholder="АА5200МН" required /><small>Нормалізований номер: {normalizeVehicleNumber(form.displayPlateNumber) || '—'}</small></label>
         <label>Марка<input value={form.brand} onChange={(event) => setForm({ ...form, brand: event.target.value })} required /></label>
         <label>Модель<input value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })} required /></label>
+        <label>Тип пального<select value={form.fuelType ?? ''} onChange={(event) => setForm({ ...form, fuelType: event.target.value ? event.target.value as FuelType : null })}><option value="">Не вказано</option>{Object.entries(fuelTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        <label>Норма витрати, л/100 км<input type="number" min="0" max="100" step="0.1" value={form.fuelConsumptionPer100Km ?? ''} onChange={(event) => setForm({ ...form, fuelConsumptionPer100Km: numberOrNull(event.target.value) })} /></label>
+        <label>Обʼєм бака, л<input type="number" min="0" max="300" step="0.1" value={form.fuelTankCapacityLiters ?? ''} onChange={(event) => setForm({ ...form, fuelTankCapacityLiters: numberOrNull(event.target.value) })} /></label>
+        <label>Початковий залишок пального, л<input type="number" min="0" max="300" step="0.1" value={form.initialFuelLiters ?? ''} onChange={(event) => setForm({ ...form, initialFuelLiters: numberOrNull(event.target.value) })} /></label>
         <label>Управління<select value={form.departmentId || ''} onChange={(event) => patchDepartment(event.target.value)} disabled={isRegional} required><option value="">Оберіть управління</option>{departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label>Внутрішній підрозділ<select value={form.departmentUnitId || ''} onChange={(event) => patchUnit(event.target.value)}><option value="">Без підрозділу</option>{formUnits.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label className="checkbox-filter"><input type="checkbox" checked={form.isActive} onChange={(event) => setForm({ ...form, isActive: event.target.checked })} />Активний</label>

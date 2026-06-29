@@ -1,0 +1,7 @@
+CREATE TYPE "FuelType" AS ENUM ('PETROL', 'DIESEL', 'LPG', 'HYBRID', 'ELECTRIC', 'OTHER');
+
+ALTER TABLE "Vehicle"
+ADD COLUMN "fuelType" "FuelType",
+ADD COLUMN "fuelConsumptionPer100Km" DOUBLE PRECISION,
+ADD COLUMN "fuelTankCapacityLiters" DOUBLE PRECISION,
+ADD COLUMN "initialFuelLiters" DOUBLE PRECISION;

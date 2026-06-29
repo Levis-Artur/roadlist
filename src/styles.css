@@ -111,6 +111,8 @@ input:focus, select:focus, textarea:focus { border-color: var(--color-accent-dar
 .error { color: #7c2f2f; background: #f5e8e8; border-color: #b77c7a; }
 .success { color: #2f5d47; background: #e7f1eb; border-color: #7fa58f; }
 .warning { color: #6e5725; background: #f3eedf; border-color: #b5a06c; }
+.message p { margin: 0; }
+.message p + p { margin-top: 4px; }
 .active-shift-summary { margin: 8px 0; border: 1px solid #8aa8c3; background: #edf4fa; }
 .active-shift-summary h3 { padding: 6px 8px; background: #d8e6f2; border-bottom: 1px solid #8aa8c3; }
 
@@ -211,6 +213,13 @@ dd { margin: 0; padding: 7px 8px; font-weight: 600; overflow-wrap: anywhere; }
 .form-field input, .form-field select, .form-field textarea { width: 100%; min-width: 0; }
 .form-grid small { color: var(--color-muted); font-size: 11px; font-weight: 400; line-height: 1.35; overflow-wrap: anywhere; }
 .modal-actions { margin-top: 10px; padding-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; border-top: 1px solid var(--color-border); }
+.fuel-info { min-width: 0; display: grid; gap: 2px; color: var(--color-text); font-size: 11px; line-height: 1.25; }
+.fuel-info span { overflow-wrap: anywhere; }
+.fuel-info b { color: var(--color-muted); font-weight: 700; }
+.fuel-accounting-card { margin: 10px 0; border: 1px solid var(--color-border-strong); background: #fff; }
+.fuel-accounting-card .section-heading { margin: 0; }
+.fuel-accounting-card .detail-grid { border-top: 1px solid var(--color-border); }
+.fuel-accounting-card .message { margin: 8px; }
 .local-cleanup-note { margin: 0 0 8px; padding: 4px 7px; border: 1px solid var(--color-border); background: var(--color-panel-2); color: var(--color-muted); font-size: 11px; }
 .stats-grid { margin-bottom: 8px; display: grid; grid-template-columns: 1fr; border: 1px solid var(--color-border-strong); background: var(--color-border); gap: 1px; }
 .stats-grid article { min-height: 37px; padding: 0; display: grid; grid-template-columns: 1fr auto; align-items: center; background: #fff; border: 0; }
@@ -499,11 +508,12 @@ figure img, .no-photo { width: 100%; max-width: 100%; min-height: 120px; max-hei
   .vehicles-table td:nth-child(2)::before { content: "Нормалізований номер"; }
   .vehicles-table td:nth-child(3)::before { content: "Марка"; }
   .vehicles-table td:nth-child(4)::before { content: "Модель"; }
-  .vehicles-table td:nth-child(5)::before { content: "УПП"; }
-  .vehicles-table td:nth-child(6)::before { content: "Підрозділ"; }
-  .vehicles-table td:nth-child(7)::before { content: "Активний"; }
-  .vehicles-table td:nth-child(8)::before { content: "Дата створення"; }
-  .vehicles-table td:nth-child(9)::before { content: "Дії"; }
+  .vehicles-table td:nth-child(5)::before { content: "Пальне"; }
+  .vehicles-table td:nth-child(6)::before { content: "УПП"; }
+  .vehicles-table td:nth-child(7)::before { content: "Підрозділ"; }
+  .vehicles-table td:nth-child(8)::before { content: "Активний"; }
+  .vehicles-table td:nth-child(9)::before { content: "Дата створення"; }
+  .vehicles-table td:nth-child(10)::before { content: "Дії"; }
 
   .admin-users-table td:nth-child(1)::before { content: "Логін"; }
   .admin-users-table td:nth-child(2)::before { content: "ПІБ"; }
