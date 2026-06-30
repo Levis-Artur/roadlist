@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AdminRole, AdminUser, Department } from '../types';
-import { adminRoleLabels, canDeleteRecords, createAdminUser, deactivateAdminUser, getAdminUsers, resetAdminPassword, resetAdminTwoFactor, updateAdminUser } from '../services/adminService';
+import { adminRoleLabels, canDeleteRecords, createAdminUser, deactivateAdminUser, getAdminUsers, recoverAdminAccess, updateAdminUser } from '../services/adminService';
 import { getDepartments } from '../services/organizationService';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 
 const emptyForm = { username: '', fullName: '', role: 'REGIONAL_ADMIN' as AdminRole, departmentId: '', department: '', unit: '', password: '', isActive: true };
+const emptyRecoveryForm = { resetPassword: true, resetTwoFactor: true };
 
 function formatDate(value?: string | null) {
   return value ? new Date(value).toLocaleString('uk-UA') : '—';
@@ -23,6 +24,11 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [recoveryTarget, setRecoveryTarget] = useState<AdminUser | null>(null);
+  const [recoveryForm, setRecoveryForm] = useState(emptyRecoveryForm);
+  const [recoveryError, setRecoveryError] = useState('');
+  const [recoveryResult, setRecoveryResult] = useState<{ temporaryPassword?: string; resetPassword: boolean; resetTwoFactor: boolean } | null>(null);
+  const [copySuccess, setCopySuccess] = useState('');
   const canDelete = canDeleteRecords(currentAdmin);
   const availableRoles = useMemo<AdminRole[]>(() => (
     currentAdmin.role === 'SYSTEM_OWNER' ? ['NATIONAL_ADMIN', 'REGIONAL_ADMIN'] : ['REGIONAL_ADMIN']
@@ -67,10 +73,7 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
         password: form.password.trim() || undefined,
         isActive: form.isActive,
       };
-      if (editing) {
-        await updateAdminUser(editing.id, payload);
-        if (form.password.trim()) await resetAdminPassword(editing.id, form.password.trim());
-      }
+      if (editing) await updateAdminUser(editing.id, payload);
       else await createAdminUser({ ...payload, password: form.password.trim() });
       setSuccess(editing ? 'Адміністратора оновлено.' : 'Адміністратора створено.');
       setOpen(false);
@@ -91,14 +94,52 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
     }
   }
 
-  async function reset2fa(item: AdminUser) {
-    if (!window.confirm(`Скинути 2FA для адміністратора ${item.username}? Після цього адміністратор має заново налаштувати Google Authenticator.`)) return;
+  function openRecovery(item: AdminUser) {
+    setRecoveryTarget(item);
+    setRecoveryForm(emptyRecoveryForm);
+    setRecoveryError('');
+    setRecoveryResult(null);
+    setCopySuccess('');
+    setError('');
+    setSuccess('');
+  }
+
+  function closeRecovery() {
+    setRecoveryTarget(null);
+    setRecoveryForm(emptyRecoveryForm);
+    setRecoveryError('');
+    setRecoveryResult(null);
+    setCopySuccess('');
+  }
+
+  async function submitRecovery(event: React.FormEvent) {
+    event.preventDefault();
+    if (!recoveryTarget) return;
+    if (!recoveryForm.resetPassword && !recoveryForm.resetTwoFactor) {
+      setRecoveryError('Оберіть дію для відновлення доступу.');
+      return;
+    }
     try {
-      await resetAdminTwoFactor(item.id);
-      setSuccess('2FA скинуто. Адміністратор має заново налаштувати двофакторну автентифікацію.');
+      const result = await recoverAdminAccess(recoveryTarget.id, recoveryForm);
+      setRecoveryResult({ temporaryPassword: result.temporaryPassword, ...recoveryForm });
+      setRecoveryError('');
+      setSuccess([
+        recoveryForm.resetPassword ? 'Пароль адміністратора скинуто.' : '',
+        recoveryForm.resetTwoFactor ? '2FA адміністратора скинуто.' : '',
+      ].filter(Boolean).join(' '));
       await load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Не вдалося скинути 2FA.');
+      setRecoveryError(caught instanceof Error ? caught.message : 'Не вдалося відновити доступ адміністратора.');
+    }
+  }
+
+  async function copyTemporaryPassword() {
+    if (!recoveryResult?.temporaryPassword) return;
+    try {
+      await navigator.clipboard.writeText(recoveryResult.temporaryPassword);
+      setCopySuccess('Пароль скопійовано.');
+    } catch {
+      setCopySuccess('Не вдалося скопіювати автоматично.');
     }
   }
 
@@ -126,7 +167,7 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
               <td className="row-actions">
                 {!protectedOwner && <button className="small-button" onClick={() => showForm(item)}>Редагувати</button>}
                 {canDelete && !protectedOwner && currentAdmin.id !== item.id && item.isActive && <button className="small-button danger-outline" onClick={() => setDeleteTarget(item)}>Видалити</button>}
-                {currentAdmin.role === 'SYSTEM_OWNER' && !protectedOwner && item.twoFactorEnabled && <button className="small-button danger-outline" onClick={() => void reset2fa(item)}>Скинути 2FA</button>}
+                {currentAdmin.role === 'SYSTEM_OWNER' && !protectedOwner && currentAdmin.id !== item.id && <button className="small-button danger-outline" onClick={() => openRecovery(item)}>Відновити доступ</button>}
                 {protectedOwner && <span className="meta-badge">Захищено</span>}
               </td>
             </tr>
@@ -141,11 +182,43 @@ export function AdminUsersDirectory({ currentAdmin }: { currentAdmin: AdminUser 
           <label>Роль<select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as AdminRole })}>{availableRoles.map((role) => <option key={role} value={role}>{adminRoleLabels[role]}</option>)}</select></label>
           {form.role === 'REGIONAL_ADMIN' && <label>Управління<select value={form.departmentId} onChange={(e) => { const selected = departments.find((item) => item.id === e.target.value); setForm({ ...form, departmentId: e.target.value, department: selected?.name || '' }); }} required><option value="">Оберіть управління</option>{departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
           {form.role === 'REGIONAL_ADMIN' && <label>Підрозділ<input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="Необов’язково" /></label>}
-          <label>{editing ? 'Новий тимчасовий пароль' : 'Тимчасовий пароль'}<input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required={!editing} /><small>Це тимчасовий пароль. Після першого входу адміністратор повинен змінити його.</small></label>
+          {!editing && <label>Тимчасовий пароль<input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required /><small>Це тимчасовий пароль. Після першого входу адміністратор повинен змінити його.</small></label>}
           <label className="checkbox-filter"><input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />Активний</label>
         </div>
         {error && <p className="message error" role="alert">{error}</p>}
         <div className="modal-actions"><button type="submit">Зберегти</button><button type="button" className="secondary" onClick={() => setOpen(false)}>Скасувати</button></div>
+      </form></div>}
+      {recoveryTarget && <div className="modal-backdrop" onMouseDown={closeRecovery}><form className="modal directory-modal recovery-modal" onSubmit={submitRecovery} onMouseDown={(e) => e.stopPropagation()}>
+        <div className="section-heading"><div><span className="eyebrow">Доступ</span><h2>Відновити доступ адміністратора</h2></div><button type="button" className="text-button" onClick={closeRecovery}>Закрити</button></div>
+        <dl className="detail-grid compact-detail-grid">
+          <div><dt>Логін</dt><dd>{recoveryTarget.username}</dd></div>
+          <div><dt>ПІБ</dt><dd>{recoveryTarget.fullName}</dd></div>
+          <div><dt>Роль</dt><dd>{adminRoleLabels[recoveryTarget.role]}</dd></div>
+        </dl>
+        {!recoveryResult ? <>
+          <p className="message warning" role="status">Ця дія не показує старий пароль і не відкриває попередній секретний ключ 2FA. Новий тимчасовий пароль генерується сервером і буде показаний лише один раз.</p>
+          <div className="recovery-options">
+            <label className="checkbox-filter"><input type="checkbox" checked={recoveryForm.resetPassword} onChange={(e) => setRecoveryForm({ ...recoveryForm, resetPassword: e.target.checked })} />Скинути пароль</label>
+            <label className="checkbox-filter"><input type="checkbox" checked={recoveryForm.resetTwoFactor} onChange={(e) => setRecoveryForm({ ...recoveryForm, resetTwoFactor: e.target.checked })} />Скинути 2FA</label>
+          </div>
+          {recoveryError && <p className="message error" role="alert">{recoveryError}</p>}
+          <div className="modal-actions"><button type="submit" className="danger">Відновити доступ</button><button type="button" className="secondary" onClick={closeRecovery}>Скасувати</button></div>
+        </> : <>
+          <div className="message success" role="status">
+            {recoveryResult.resetPassword && <p>Пароль адміністратора скинуто.</p>}
+            {recoveryResult.resetTwoFactor && <p>2FA адміністратора скинуто.</p>}
+            {recoveryResult.resetPassword && <p>Адміністратор має встановити новий пароль після входу.</p>}
+            {recoveryResult.resetTwoFactor && <p>Адміністратор має заново налаштувати автентифікатор після входу.</p>}
+          </div>
+          {recoveryResult.temporaryPassword && <div className="temporary-password-panel">
+            <span className="eyebrow">Тимчасовий пароль</span>
+            <code>{recoveryResult.temporaryPassword}</code>
+            <p className="message warning">Скопіюйте тимчасовий пароль зараз. Після закриття цього вікна він більше не буде показаний.</p>
+            <button type="button" className="secondary" onClick={() => void copyTemporaryPassword()}>Скопіювати пароль</button>
+            {copySuccess && <p className="field-hint">{copySuccess}</p>}
+          </div>}
+          <div className="modal-actions"><button type="button" onClick={closeRecovery}>Закрити</button></div>
+        </>}
       </form></div>}
       {deleteTarget && <DeleteConfirmModal title="Видалити адміністратора" description={`Буде приховано адміністратора: ${deleteTarget.username}.`} onCancel={() => setDeleteTarget(null)} onConfirm={(input) => deactivate(deleteTarget, input)} />}
     </section>

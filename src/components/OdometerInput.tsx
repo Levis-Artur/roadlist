@@ -49,9 +49,6 @@ export function OdometerInput({ onSubmit, submitLabel, type, children }: Props) 
 
   function submitManual(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (import.meta.env.DEV) {
-      console.log('[OdometerInput] Зберегти кілометраж', { manualValue });
-    }
     const normalizedValue = manualValue.trim().replace(',', '.');
     if (!normalizedValue) {
       setError(type === 'start' ? 'Введіть початковий кілометраж.' : 'Введіть кінцевий кілометраж.');

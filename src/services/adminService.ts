@@ -25,6 +25,10 @@ interface AdminResponse {
   admin: AdminUser;
 }
 
+interface AdminRecoveryResponse extends AdminResponse {
+  temporaryPassword?: string;
+}
+
 export const adminRoleLabels: Record<AdminRole, string> = {
   SYSTEM_OWNER: 'Власник системи',
   NATIONAL_ADMIN: 'Національний адміністратор',
@@ -185,8 +189,14 @@ export async function updateAdminUser(id: string, input: Partial<{
   return (await apiPatch<AdminResponse>(`/api/admin/users/${encodeURIComponent(id)}`, input)).admin;
 }
 
-export async function resetAdminPassword(id: string, newTemporaryPassword: string): Promise<AdminUser> {
-  return (await apiPatch<AdminResponse>(`/api/admin/users/${encodeURIComponent(id)}/password`, { newTemporaryPassword })).admin;
+export async function recoverAdminAccess(id: string, input: { resetPassword: boolean; resetTwoFactor: boolean }): Promise<{ admin: AdminUser; temporaryPassword?: string }> {
+  const response = await apiPost<AdminRecoveryResponse>(`/api/admin/users/${encodeURIComponent(id)}/recover-access`, input);
+  return { admin: response.admin, temporaryPassword: response.temporaryPassword };
+}
+
+export async function resetAdminPassword(id: string): Promise<{ admin: AdminUser; temporaryPassword?: string }> {
+  const response = await apiPatch<AdminRecoveryResponse>(`/api/admin/users/${encodeURIComponent(id)}/password`, {});
+  return { admin: response.admin, temporaryPassword: response.temporaryPassword };
 }
 
 export async function resetAdminTwoFactor(id: string): Promise<AdminUser> {

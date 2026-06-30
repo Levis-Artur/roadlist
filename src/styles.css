@@ -220,7 +220,10 @@ dd { margin: 0; padding: 7px 8px; font-weight: 600; overflow-wrap: anywhere; }
 .fuel-accounting-card .section-heading { margin: 0; }
 .fuel-accounting-card .detail-grid { border-top: 1px solid var(--color-border); }
 .fuel-accounting-card .message { margin: 8px; }
-.local-cleanup-note { margin: 0 0 8px; padding: 4px 7px; border: 1px solid var(--color-border); background: var(--color-panel-2); color: var(--color-muted); font-size: 11px; }
+.recovery-options { display: grid; gap: 8px; margin: 10px 0; }
+.temporary-password-panel { display: grid; gap: 8px; margin-top: 10px; padding: 10px; border: 1px solid var(--color-border-strong); background: #fff; }
+.temporary-password-panel code { display: block; padding: 10px; border: 1px solid var(--color-border); background: var(--color-panel-2); color: var(--color-text); font: 700 18px Consolas, "Courier New", monospace; letter-spacing: .04em; overflow-wrap: anywhere; }
+.temporary-password-panel .message { margin: 0; }
 .stats-grid { margin-bottom: 8px; display: grid; grid-template-columns: 1fr; border: 1px solid var(--color-border-strong); background: var(--color-border); gap: 1px; }
 .stats-grid article { min-height: 37px; padding: 0; display: grid; grid-template-columns: 1fr auto; align-items: center; background: #fff; border: 0; }
 .stats-grid article:last-child { grid-column: auto; }
@@ -649,7 +652,7 @@ figure img, .no-photo { width: 100%; max-width: 100%; min-height: 120px; max-hei
 
 @media print {
   body { background: #fff !important; color: #000 !important; }
-  .site-header, .module-bar, .status-bar, .no-print, .admin-header, .admin-nav, .local-cleanup-note,
+  .site-header, .module-bar, .status-bar, .no-print, .admin-header, .admin-nav,
   .stats-grid, .admin-filters, .table-card, .audit-section, .modal-backdrop:not(.print-modal-backdrop) {
     display: none !important;
   }

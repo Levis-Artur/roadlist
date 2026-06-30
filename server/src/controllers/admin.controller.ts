@@ -9,6 +9,7 @@ import {
   listAdminUsers,
   loginAdmin,
   logoutAdmin,
+  recoverAdminAccess,
   resetAdminPassword,
   resetAdminTwoFactor,
   setupTwoFactor,
@@ -97,13 +98,19 @@ export async function updateAdminUserController(request: Request, response: Resp
 
 export async function resetAdminPasswordController(request: Request, response: Response, next: NextFunction) {
   try {
-    response.json({ success: true, admin: await resetAdminPassword(request.admin!, request.params.id, request.body ?? {}, metadata(request)) });
+    response.json({ success: true, ...await resetAdminPassword(request.admin!, request.params.id, request.body ?? {}, metadata(request)) });
   } catch (error) { next(error); }
 }
 
 export async function resetAdminTwoFactorController(request: Request, response: Response, next: NextFunction) {
   try {
-    response.json({ success: true, admin: await resetAdminTwoFactor(request.admin!, request.params.id, metadata(request)) });
+    response.json({ success: true, ...await resetAdminTwoFactor(request.admin!, request.params.id, metadata(request)) });
+  } catch (error) { next(error); }
+}
+
+export async function recoverAdminAccessController(request: Request, response: Response, next: NextFunction) {
+  try {
+    response.json({ success: true, ...await recoverAdminAccess(request.admin!, request.params.id, request.body ?? {}, metadata(request)) });
   } catch (error) { next(error); }
 }
 

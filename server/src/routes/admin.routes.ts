@@ -8,6 +8,7 @@ import {
   listAdminUsersController,
   loginAdminController,
   logoutAdminController,
+  recoverAdminAccessController,
   resetAdminPasswordController,
   resetAdminTwoFactorController,
   setupTwoFactorController,
@@ -26,6 +27,7 @@ adminRouter.post('/logout', authAdmin, logoutAdminController);
 adminRouter.get('/me', authAdmin, getMyAdminProfileController);
 adminRouter.get('/users', authAdmin, requireAdminManager, listAdminUsersController);
 adminRouter.post('/users', authAdmin, requireAdminManager, createAdminUserController);
+adminRouter.post('/users/:id/recover-access', authAdmin, requireAdminManager, recoverAdminAccessController);
 adminRouter.patch('/users/:id/password', authAdmin, requireAdminManager, resetAdminPasswordController);
 adminRouter.post('/users/:id/2fa/reset', authAdmin, requireAdminManager, resetAdminTwoFactorController);
 adminRouter.post('/:id/2fa/reset', authAdmin, requireAdminManager, resetAdminTwoFactorController);

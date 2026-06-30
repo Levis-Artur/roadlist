@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { randomInt } from 'crypto';
 import jwt, { type SignOptions } from 'jsonwebtoken';
 import { generateSecret, generateURI, verify } from 'otplib';
 import QRCode from 'qrcode';
@@ -19,6 +20,13 @@ const MAX_FAILED_ATTEMPTS = 5;
 const IP_WINDOW_MS = 15 * 60 * 1000;
 const MAX_IP_ATTEMPTS = 20;
 const ipLoginAttempts = new Map<string, number[]>();
+const TEMP_PASSWORD_GROUPS = {
+  upper: 'ABCDEFGHJKLMNPQRSTUVWXYZ',
+  lower: 'abcdefghijkmnopqrstuvwxyz',
+  digits: '23456789',
+  symbols: '!@#$%',
+} as const;
+const TEMP_PASSWORD_ALPHABET = Object.values(TEMP_PASSWORD_GROUPS).join('');
 
 function isAdminRole(value: unknown): value is AdminRole {
   return typeof value === 'string' && ADMIN_ROLES.includes(value as AdminRole);
@@ -44,6 +52,22 @@ function validatePasswordPolicy(value: unknown): string {
     || !/[^A-Za-zА-Яа-яІіЇїЄєҐґ0-9]/.test(password)
   ) throw new AppError(PASSWORD_POLICY_MESSAGE, 400);
   return password;
+}
+
+function generateTemporaryPassword(): string {
+  const requiredCharacters = Object.values(TEMP_PASSWORD_GROUPS).map((group) => group[randomInt(group.length)]);
+  const randomCharacters = Array.from({ length: 11 }, () => TEMP_PASSWORD_ALPHABET[randomInt(TEMP_PASSWORD_ALPHABET.length)]);
+  const characters = [...requiredCharacters, ...randomCharacters];
+  for (let index = characters.length - 1; index > 0; index -= 1) {
+    const swapIndex = randomInt(index + 1);
+    [characters[index], characters[swapIndex]] = [characters[swapIndex], characters[index]];
+  }
+  return [characters.slice(0, 5).join(''), characters.slice(5, 10).join(''), characters.slice(10, 15).join('')].join('-');
+}
+
+function ensureOwnerRecoveryAccess(actor: AdminTokenPayload, targetId: string) {
+  if (actor.role !== 'SYSTEM_OWNER') throw new AppError('Відновити доступ адміністратора може тільки власник системи.', 403);
+  if (actor.adminId === targetId) throw new AppError('Не можна виконати цю дію для власного облікового запису.', 400);
 }
 
 function actorMetadata(actor: AdminTokenPayload | undefined, metadata: RequestMetadata): RequestMetadata {
@@ -247,7 +271,7 @@ export async function changeOwnPassword(actor: AdminTokenPayload, input: Record<
     },
   });
   await createAuditLog({
-    action: admin.mustChangePassword ? 'Forced password change completed' : 'Admin password changed by self',
+    action: admin.mustChangePassword ? 'Примусову зміну пароля завершено' : 'Адміністратор змінив власний пароль',
     entityType: 'admin',
     entityId: admin.id,
     details: admin.username,
@@ -434,7 +458,7 @@ export async function createAdminUser(actor: AdminTokenPayload, input: Record<st
 }
 
 export async function updateAdminUser(actor: AdminTokenPayload, id: string, input: Record<string, unknown>, metadata: RequestMetadata = {}) {
-  const current = await prisma.adminUser.findUnique({ where: { id } });
+  const current = await prisma.adminUser.findFirst({ where: { id, isDeleted: false } });
   if (!current) throw new AppError('Адміністратора не знайдено.', 404);
   const currentRole = validateRole(current.role);
   if (currentRole === 'SYSTEM_OWNER') {
@@ -481,65 +505,74 @@ export async function updateAdminUser(actor: AdminTokenPayload, id: string, inpu
   } catch (error) { uniqueAdminError(error); }
 }
 
-export async function resetAdminPassword(actor: AdminTokenPayload, id: string, input: Record<string, unknown>, metadata: RequestMetadata = {}) {
-  const current = await prisma.adminUser.findUnique({ where: { id } });
+export async function recoverAdminAccess(actor: AdminTokenPayload, id: string, input: Record<string, unknown>, metadata: RequestMetadata = {}) {
+  ensureOwnerRecoveryAccess(actor, id);
+  const resetPassword = Boolean(input.resetPassword);
+  const resetTwoFactor = Boolean(input.resetTwoFactor);
+  if (!resetPassword && !resetTwoFactor) throw new AppError('Оберіть дію для відновлення доступу.', 400);
+  const current = await prisma.adminUser.findFirst({ where: { id, isDeleted: false } });
   if (!current) throw new AppError('Адміністратора не знайдено.', 404);
   const currentRole = validateRole(current.role);
   if (currentRole === 'SYSTEM_OWNER') throw new AppError(OWNER_LOCK_MESSAGE, 403);
-  ensureCanManageTarget(actor, currentRole);
-  const newTemporaryPassword = validatePasswordPolicy(input.newTemporaryPassword);
+  const temporaryPassword = resetPassword ? generateTemporaryPassword() : undefined;
   const updated = await prisma.adminUser.update({
     where: { id },
     data: {
-      passwordHash: await bcrypt.hash(newTemporaryPassword, 10),
-      mustChangePassword: true,
-      passwordChangedAt: null,
+      passwordHash: temporaryPassword ? await bcrypt.hash(temporaryPassword, 10) : undefined,
+      mustChangePassword: resetPassword ? true : undefined,
+      passwordChangedAt: resetPassword ? null : undefined,
       failedLoginAttempts: 0,
       lockedUntil: null,
+      twoFactorEnabled: resetTwoFactor ? false : undefined,
+      twoFactorSecret: resetTwoFactor ? null : undefined,
+      twoFactorEnabledAt: resetTwoFactor ? null : undefined,
+      twoFactorLastVerifiedAt: resetTwoFactor ? null : undefined,
+      twoFactorRecoveryCodesHash: resetTwoFactor ? null : undefined,
     },
   });
+  if (resetPassword) {
+    await createAuditLog({
+      action: 'Пароль адміністратора скинуто власником системи',
+      entityType: 'admin',
+      entityId: updated.id,
+      details: updated.username,
+      targetAdminId: updated.id,
+      targetRole: currentRole,
+      targetDepartment: updated.department,
+      ...actorMetadata(actor, metadata),
+    });
+  }
+  if (resetTwoFactor) {
+    await createAuditLog({
+      action: '2FA адміністратора скинуто власником системи',
+      entityType: 'admin',
+      entityId: updated.id,
+      details: updated.username,
+      targetAdminId: updated.id,
+      targetRole: currentRole,
+      targetDepartment: updated.department,
+      ...actorMetadata(actor, metadata),
+    });
+  }
   await createAuditLog({
-    action: 'Admin password reset by SYSTEM_OWNER/NATIONAL_ADMIN',
+    action: 'Відновлення доступу адміністратора',
     entityType: 'admin',
     entityId: updated.id,
-    details: updated.username,
+    details: `${updated.username}; пароль: ${resetPassword ? 'скинуто' : 'без змін'}; 2FA: ${resetTwoFactor ? 'скинуто' : 'без змін'}`,
     targetAdminId: updated.id,
     targetRole: currentRole,
     targetDepartment: updated.department,
     ...actorMetadata(actor, metadata),
   });
-  return publicAdmin(updated);
+  return { admin: publicAdmin(updated), temporaryPassword };
+}
+
+export async function resetAdminPassword(actor: AdminTokenPayload, id: string, _input: Record<string, unknown> = {}, metadata: RequestMetadata = {}) {
+  return recoverAdminAccess(actor, id, { resetPassword: true, resetTwoFactor: false }, metadata);
 }
 
 export async function resetAdminTwoFactor(actor: AdminTokenPayload, id: string, metadata: RequestMetadata = {}) {
-  if (actor.role !== 'SYSTEM_OWNER') throw new AppError('Скинути 2FA може тільки власник системи.', 403);
-  if (actor.adminId === id) throw new AppError('Неможливо скинути власну 2FA через адміністративну панель.', 400);
-  const current = await prisma.adminUser.findUnique({ where: { id } });
-  if (!current) throw new AppError('Адміністратора не знайдено.', 404);
-  const currentRole = validateRole(current.role);
-  if (currentRole === 'SYSTEM_OWNER') throw new AppError(OWNER_LOCK_MESSAGE, 403);
-  const updated = await prisma.adminUser.update({
-    where: { id },
-    data: {
-      twoFactorEnabled: false,
-      twoFactorSecret: null,
-      twoFactorEnabledAt: null,
-      twoFactorLastVerifiedAt: null,
-      twoFactorRecoveryCodesHash: null,
-      mustChangePassword: true,
-    },
-  });
-  await createAuditLog({
-    action: '2FA reset by SYSTEM_OWNER',
-    entityType: 'admin',
-    entityId: updated.id,
-    details: updated.username,
-    targetAdminId: updated.id,
-    targetRole: currentRole,
-    targetDepartment: updated.department,
-    ...actorMetadata(actor, metadata),
-  });
-  return publicAdmin(updated);
+  return recoverAdminAccess(actor, id, { resetPassword: false, resetTwoFactor: true }, metadata);
 }
 
 export async function deactivateAdminUser(actor: AdminTokenPayload, id: string, input: Record<string, unknown> = {}, metadata: RequestMetadata = {}) {
