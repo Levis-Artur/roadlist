@@ -1,11 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { OfficerDirectory } from '../components/OfficerDirectory';
 import { VehicleDirectory } from '../components/VehicleDirectory';
 import { AdminUsersDirectory } from '../components/AdminUsersDirectory';
 import { DepartmentDirectory } from '../components/DepartmentDirectory';
 import { DeleteConfirmModal } from '../components/DeleteConfirmModal';
+import { AdminProfileSection } from '../components/admin/AdminProfileSection';
+import { AdminStatsCards } from '../components/admin/AdminStatsCards';
+import { AuditLogSection } from '../components/admin/AuditLogSection';
+import { MonthlySheetDetailsModal } from '../components/admin/MonthlySheetDetailsModal';
+import { MonthlySheetPrintModal } from '../components/admin/MonthlySheetPrintModal';
+import { MonthlySheetsSection } from '../components/admin/MonthlySheetsSection';
+import { RouteSheetDetailsModal } from '../components/admin/RouteSheetDetailsModal';
+import { RouteSheetsSection } from '../components/admin/RouteSheetsSection';
+import { exportRouteSheetsCsv } from '../components/admin/routeSheetCsv';
 import { getAuditLogs } from '../services/auditService';
-import { getOdometerPhoto } from '../services/photoService';
 import { deleteRouteSheet, getRouteSheetById, getRouteSheets, markRouteSheetNeedsReview, updateRouteSheetAdminComment, verifyRouteSheet } from '../services/routeSheetService';
 import { getOfficers } from '../services/officerService';
 import { getVehicles } from '../services/vehicleService';
@@ -21,117 +29,14 @@ import {
 import type { AuditLog, MonthlyRouteSheet, Officer, RouteSheet, RouteSheetStatus, Vehicle } from '../types';
 import type { AdminUser } from '../types';
 import { findVehicleByNumber, formatVehicleLabel } from '../utils/vehicleDisplay';
-import { adminRoleLabels, canDeleteRecords, canManageAdminUsers, changeOwnPassword, getMyAdminProfile } from '../services/adminService';
-
-const statusLabels: Record<RouteSheetStatus, string> = {
-  active: 'Активна',
-  completed: 'Завершена',
-  needs_review: 'Потребує перевірки',
-  verified: 'Перевірено',
-};
-
-const monthlyStatusLabels: Record<string, string> = {
-  open: 'В роботі',
-  closed: 'Закритий',
-  archived: 'В архіві',
-};
-
-const monthNames = [
-  'січень', 'лютий', 'березень', 'квітень', 'травень', 'червень',
-  'липень', 'серпень', 'вересень', 'жовтень', 'листопад', 'грудень',
-];
+import { canDeleteRecords, canManageAdminUsers, changeOwnPassword, getMyAdminProfile } from '../services/adminService';
+import { adminRoleLabels } from '../utils/roles';
 
 function displayVehicleFromList(vehicles: Vehicle[], vehicleNumber: string): string {
   const vehicle = findVehicleByNumber(vehicles, vehicleNumber);
   return vehicle ? formatVehicleLabel(vehicle) : vehicleNumber;
 }
 
-function formatDate(value?: string, dateOnly = false) {
-  if (!value) return '—';
-  return new Intl.DateTimeFormat('uk-UA', dateOnly
-    ? { dateStyle: 'short' }
-    : { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
-}
-
-function formatLiters(value?: number | null) {
-  return value === null || value === undefined ? '—' : `${value.toLocaleString('uk-UA', { minimumFractionDigits: 0, maximumFractionDigits: 1 })} л`;
-}
-
-function formatConsumption(value?: number | null) {
-  return value === null || value === undefined ? '—' : `${value.toLocaleString('uk-UA', { minimumFractionDigits: 0, maximumFractionDigits: 1 })} л/100 км`;
-}
-
-function isCrossMonthShift(entry: RouteSheet): boolean {
-  if (!entry.endedAt) return false;
-  const startedAt = new Date(entry.startedAt);
-  const endedAt = new Date(entry.endedAt);
-  return startedAt.getFullYear() !== endedAt.getFullYear() || startedAt.getMonth() !== endedAt.getMonth();
-}
-
-function csvCell(value: string | number | boolean | undefined): string {
-  const text = value === undefined ? '' : String(value);
-  return `"${text.replace(/"/g, '""')}"`;
-}
-
-function exportCsv(routeSheets: RouteSheet[]) {
-  const headers = [
-    'Дата', 'ПІБ', 'Номер жетона', 'УПП', 'Підрозділ', 'Номер екіпажу / підрозділу',
-    'Номер автомобіля', 'Початковий кілометраж', 'Кінцевий кілометраж', 'Пробіг',
-    'Статус', 'Ручне внесення початку', 'Ручне внесення кінця', 'Час початку', 'Час завершення',
-    'Дата перевірки адміністратором', 'Перевірив', 'Коментар адміністратора',
-  ];
-  const rows = routeSheets.map((item) => [
-    formatDate(item.createdAt, true), item.fullName, item.badgeNumber, item.department,
-    item.unit || '—', item.crewNumber || '—', item.vehicleNumber, item.startOdometer, item.endOdometer, item.distanceKm,
-    statusLabels[item.status], item.startManualEntry ? 'Так' : 'Ні',
-    item.endManualEntry === undefined ? '' : item.endManualEntry ? 'Так' : 'Ні',
-    formatDate(item.startedAt), item.endedAt ? formatDate(item.endedAt) : '',
-    item.adminVerifiedAt ? formatDate(item.adminVerifiedAt) : '—',
-    item.adminVerifiedBy || '—',
-    item.adminReviewComment || '—',
-  ]);
-  const csv = `\uFEFF${[headers, ...rows].map((row) => row.map(csvCell).join(';')).join('\r\n')}`;
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'route-sheets-export.csv';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
-function DetailItem({ label, value }: { label: string; value: React.ReactNode }) {
-  return <div><dt>{label}</dt><dd>{value ?? '—'}</dd></div>;
-}
-
-function StoredPhoto({ photoId, alt }: { photoId?: string; alt: string }) {
-  const [photo, setPhoto] = useState<string | null>();
-
-  useEffect(() => {
-    let active = true;
-    let objectUrl: string | null = null;
-    setPhoto(undefined);
-    if (!photoId) {
-      setPhoto(null);
-      return () => { active = false; };
-    }
-    void getOdometerPhoto(photoId)
-      .then((dataUrl) => {
-        if (dataUrl?.startsWith('blob:')) objectUrl = dataUrl;
-        if (active) setPhoto(dataUrl);
-      })
-      .catch(() => { if (active) setPhoto(null); });
-    return () => {
-      active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [photoId]);
-
-  if (photo === undefined) return <div className="no-photo">Завантаження фото…</div>;
-  if (photo) return <img src={photo} alt={alt} onError={() => setPhoto(null)} />;
-  return <div className="no-photo">{photoId ? 'Фото недоступне або було видалене.' : 'Фото відсутнє'}</div>;
-}
 
 type AdminSection = 'route_sheets' | 'monthly_route_sheets' | 'departments' | 'officers' | 'vehicles' | 'audit' | 'admins' | 'profile';
 
@@ -259,7 +164,7 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
     setReviewSuccess('');
   }
 
-  async function submitReviewAction(event: React.FormEvent) {
+  async function submitReviewAction(event: FormEvent) {
     event.preventDefault();
     if (!selected || !reviewAction) return;
     setReviewSubmitting(true);
@@ -363,7 +268,7 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
     await refreshData();
   }
 
-  async function submitProfilePassword(event: React.FormEvent) {
+  async function submitProfilePassword(event: FormEvent) {
     event.preventDefault();
     setAdminError('');
     try {
@@ -389,7 +294,7 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
         </div>
         <div className="admin-actions">
           {(section === 'route_sheets' || section === 'monthly_route_sheets' || section === 'audit') && <button type="button" className="secondary compact" onClick={() => void refreshData()} disabled={loading}>Оновити</button>}
-          {section === 'route_sheets' && <button type="button" className="secondary compact" onClick={() => exportCsv(routeSheets)} disabled={!routeSheets.length}>Експорт CSV</button>}
+          {section === 'route_sheets' && <button type="button" className="secondary compact" onClick={() => exportRouteSheetsCsv(routeSheets)} disabled={!routeSheets.length}>Експорт CSV</button>}
           <button type="button" className="secondary compact" onClick={onLogout}>Вийти</button>
         </div>
       </section>
@@ -412,42 +317,16 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
       {section === 'vehicles' && <VehicleDirectory currentAdmin={admin} />}
       {section === 'admins' && canManageAdmins && <AdminUsersDirectory currentAdmin={admin} />}
       {section === 'profile' && (
-        <section className="panel">
-          <div className="section-heading"><div><span className="eyebrow">Безпека</span><h2>Мій профіль</h2></div></div>
-          <dl className="detail-grid">
-            <DetailItem label="ПІБ" value={myProfile.fullName} />
-            <DetailItem label="Логін" value={myProfile.username} />
-            <DetailItem label="Роль" value={adminRoleLabels[myProfile.role]} />
-            <DetailItem label="УПП" value={myProfile.department || '—'} />
-            <DetailItem label="Підрозділ" value={myProfile.unit || '—'} />
-            <DetailItem label="Останній вхід" value={formatDate(myProfile.lastLoginAt ?? undefined)} />
-            <DetailItem label="Дата зміни пароля" value={formatDate(myProfile.passwordChangedAt ?? undefined)} />
-            <DetailItem label="Двофакторна автентифікація" value={myProfile.twoFactorEnabled ? 'Увімкнена' : 'Не увімкнена'} />
-            <DetailItem label="2FA увімкнено" value={formatDate(myProfile.twoFactorEnabledAt ?? undefined)} />
-          </dl>
-          <form className="admin-review-form" onSubmit={(event) => void submitProfilePassword(event)}>
-            <h3>Змінити пароль</h3>
-            <div className="form-grid">
-              <label>Поточний пароль<input type="password" value={profilePasswordForm.currentPassword} onChange={(event) => setProfilePasswordForm({ ...profilePasswordForm, currentPassword: event.target.value })} required /></label>
-              <label>Новий пароль<input type="password" value={profilePasswordForm.newPassword} onChange={(event) => setProfilePasswordForm({ ...profilePasswordForm, newPassword: event.target.value })} required /><small>Мінімум 12 символів: велика і мала літера, цифра та спецсимвол.</small></label>
-              <label>Повторити новий пароль<input type="password" value={profilePasswordForm.confirmPassword} onChange={(event) => setProfilePasswordForm({ ...profilePasswordForm, confirmPassword: event.target.value })} required /></label>
-            </div>
-            <button type="submit">Зберегти новий пароль</button>
-            {profileMessage && <p className="message success" role="status">{profileMessage}</p>}
-          </form>
-        </section>
+        <AdminProfileSection
+          myProfile={myProfile}
+          profilePasswordForm={profilePasswordForm}
+          profileMessage={profileMessage}
+          setProfilePasswordForm={setProfilePasswordForm}
+          onSubmitPassword={submitProfilePassword}
+        />
       )}
 
-      <section className="stats-grid" aria-label="Статистика маршрутних листів" hidden={section !== 'route_sheets'}>
-        <article><span>Всього листів</span><strong>{stats.total}</strong></article>
-        <article><span>Активні зміни</span><strong>{stats.active}</strong></article>
-        <article><span>Завершені</span><strong>{stats.completed}</strong></article>
-        <article className="warning-stat"><span>Потребують перевірки</span><strong>{stats.needsReview}</strong></article>
-        <article><span>Перевірено</span><strong>{stats.verified}</strong></article>
-        <article><span>Сумарний пробіг</span><strong>{stats.distance.toLocaleString('uk-UA')} <small>км</small></strong></article>
-        <article><span>Активні патрульні</span><strong>{stats.activeOfficers}</strong></article>
-        <article><span>Активні автомобілі</span><strong>{stats.activeVehicles}</strong></article>
-      </section>
+      <AdminStatsCards stats={stats} hidden={section !== 'route_sheets'} />
 
       <section className="admin-filters" aria-label="Фільтри маршрутних листів" hidden={section !== 'route_sheets' && section !== 'monthly_route_sheets'}>
         {section === 'route_sheets' && <label>Пошук
@@ -467,312 +346,67 @@ export function AdminPage({ admin, onLogout }: { admin: AdminUser; onLogout: () 
         </label>}
       </section>
 
-      {section === 'route_sheets' && (loading ? (
-        <section className="empty-state"><h2>Завантажуємо маршрутні листи...</h2></section>
-      ) : !routeSheets.length ? (
-        <section className="empty-state"><h2>Маршрутних листів ще немає</h2><p>Створені зміни з’являться тут автоматично.</p></section>
-      ) : !filteredRouteSheets.length ? (
-        <section className="empty-state"><h2>Записів не знайдено</h2><p>Змініть пошуковий запит або фільтр статусу.</p></section>
-      ) : (
-        <section className="table-card">
-          <div className="table-scroll">
-            <table className="responsive-table route-sheets-table">
-              <thead><tr>
-                <th>Дата</th><th>ПІБ</th><th>Номер жетона</th><th>УПП</th><th>Підрозділ</th>
-                <th>Екіпаж / підрозділ</th><th>Автомобіль</th><th>Початковий км</th><th>Кінцевий км</th>
-                <th>Пробіг</th><th>Заправка</th><th>Літри</th><th>Статус</th><th>Ручне внесення</th><th>Потребує перевірки</th>
-                <th>Час початку</th><th>Час завершення</th><th>Деталі</th>
-              </tr></thead>
-              <tbody>{filteredRouteSheets.map((item) => (
-                <tr key={item.id}>
-                  <td>{formatDate(item.createdAt, true)}</td><td>{item.fullName}</td><td>{item.badgeNumber}</td>
-                  <td>{item.department}</td><td>{item.unit || '—'}</td><td>{item.crewNumber || '—'}</td><td>{displayVehicle(item.vehicleNumber)}</td><td>{item.startOdometer}</td>
-                  <td>{item.endOdometer ?? '—'}</td><td>{item.distanceKm ?? '—'}</td><td>{item.refueled ? 'Так' : 'Ні'}</td><td>{item.refueled ? item.fuelLiters ?? '—' : '—'}</td>
-                  <td><span className={`status ${item.status}`}>{statusLabels[item.status]}</span></td>
-                  <td><span className={`meta-badge ${item.startManualEntry || item.endManualEntry ? 'manual' : ''}`}>{item.startManualEntry || item.endManualEntry ? 'Так' : 'Ні'}</span></td><td>{item.status === 'needs_review' ? 'Так' : 'Ні'}</td>
-                  <td>{formatDate(item.startedAt)}</td><td>{formatDate(item.endedAt)}</td>
-                  <td className="row-actions">
-                    <button type="button" className="small-button" onClick={() => void openDetails(item.id)}>{item.status === 'needs_review' ? 'Перевірити' : 'Деталі'}</button>
-                    {canDelete && <button type="button" className="small-button danger-outline" onClick={() => setDeleteTarget({ type: 'route', id: item.id, label: item.fullName })}>Видалити</button>}
-                  </td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
-        </section>
-      ))}
+      {section === 'route_sheets' && (
+        <RouteSheetsSection
+          loading={loading}
+          routeSheets={routeSheets}
+          filteredRouteSheets={filteredRouteSheets}
+          canDelete={canDelete}
+          displayVehicle={displayVehicle}
+          onOpenDetails={(id) => void openDetails(id)}
+          onRequestDelete={(target) => setDeleteTarget(target)}
+        />
+      )}
 
-      {section === 'monthly_route_sheets' && (loading ? (
-        <section className="empty-state"><h2>Завантажуємо місячні маршрутні листи...</h2></section>
-      ) : !monthlyRouteSheets.length ? (
-        <section className="empty-state"><h2>Місячних маршрутних листів ще немає</h2><p>Перший лист створиться автоматично під час початку зміни на автомобілі.</p></section>
-      ) : !filteredMonthlyRouteSheets.length ? (
-        <section className="empty-state"><h2>Записів не знайдено</h2><p>Змініть фільтр управління або підрозділу.</p></section>
-      ) : (
-        <section className="table-card">
-          <div className="table-scroll">
-            <table className="responsive-table monthly-sheets-table">
-              <thead><tr>
-                <th>Автомобіль</th><th>Номерний знак</th><th>УПП</th><th>Підрозділ</th><th>Місяць</th><th>Рік</th>
-                <th>Статус</th><th>Початковий км</th><th>Кінцевий км</th><th>Загальний пробіг</th>
-                <th>Загальна заправка, л</th><th>Кількість змін</th><th>Дії</th>
-              </tr></thead>
-              <tbody>{filteredMonthlyRouteSheets.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.vehicleBrand} {item.vehicleModel}</td>
-                  <td>{item.displayVehicleNumber || item.vehicleNumber}</td>
-                  <td>{item.department}</td>
-                  <td>{item.unit || '—'}</td>
-                  <td>{monthNames[item.month - 1] ?? item.month}</td>
-                  <td>{item.year}</td>
-                  <td><span className={`status ${item.status}`}>{monthlyStatusLabels[item.status] ?? item.status}</span></td>
-                  <td>{item.openingOdometer ?? '—'}</td>
-                  <td>{item.closingOdometer ?? '—'}</td>
-                  <td>{item.totalDistanceKm}</td>
-                  <td>{item.totalFuelLiters.toLocaleString('uk-UA')}</td>
-                  <td>{item.shiftCount ?? item.shiftEntries?.length ?? 0}</td>
-                  <td className="action-cell">
-                    <div className="button-row compact-row">
-                      <button type="button" className="small-button" onClick={() => void openMonthlyDetails(item.id)}>Переглянути</button>
-                      <button type="button" className="small-button" onClick={() => void openMonthlyPrint(item.id)}>Друк</button>
-                      {item.status === 'closed' ? (
-                        <button type="button" className="small-button" onClick={() => void reopenMonth(item.id)}>Повернути в роботу</button>
-                      ) : (
-                        <button type="button" className="small-button danger-mini" disabled={item.status !== 'open'} onClick={() => void closeMonth(item.id)}>Закрити місяць</button>
-                      )}
-                      {canDelete && <button type="button" className="small-button danger-outline" onClick={() => setDeleteTarget({ type: 'monthly', id: item.id, label: `${item.vehicleBrand} ${item.vehicleModel} ${item.displayVehicleNumber || item.vehicleNumber}` })}>Видалити</button>}
-                    </div>
-                  </td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
-        </section>
-      ))}
+      {section === 'monthly_route_sheets' && (
+        <MonthlySheetsSection
+          loading={loading}
+          monthlyRouteSheets={monthlyRouteSheets}
+          filteredMonthlyRouteSheets={filteredMonthlyRouteSheets}
+          canDelete={canDelete}
+          onOpenDetails={(id) => void openMonthlyDetails(id)}
+          onOpenPrint={(id) => void openMonthlyPrint(id)}
+          onCloseMonth={(id) => void closeMonth(id)}
+          onReopenMonth={(id) => void reopenMonth(id)}
+          onRequestDelete={(target) => setDeleteTarget(target)}
+        />
+      )}
 
-      <section className="audit-section" hidden={section !== 'audit'}>
-        <div className="registry-heading"><span className="eyebrow">Системний реєстр</span><h2>Журнал подій</h2></div>
-        {!auditLogs.length ? (
-          <div className="empty-state compact-empty"><p>Записів журналу ще немає.</p></div>
-        ) : (
-          <div className="table-card"><div className="table-scroll">
-            <table className="responsive-table audit-table">
-              <thead><tr><th>Дата/час</th><th>Дія</th><th>Тип сутності</th><th>Номер жетона</th><th>Деталі</th></tr></thead>
-              <tbody>{auditLogs.map((log) => (
-                <tr key={log.id}><td>{formatDate(log.createdAt)}</td><td>{log.action}</td><td>{log.entityType}</td><td>{log.badgeNumber ?? '—'}</td><td>{log.details ?? '—'}</td></tr>
-              ))}</tbody>
-            </table>
-          </div></div>
-        )}
-      </section>
+      <AuditLogSection auditLogs={auditLogs} hidden={section !== 'audit'} />
 
       {selected && (
-        <div className="modal-backdrop" onMouseDown={() => { resetReviewForm(); setSelected(undefined); }}>
-          <section className="modal detail-modal" role="dialog" aria-modal="true" aria-label="Деталі маршрутного листа" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="section-heading"><div><span className="eyebrow">Маршрутний лист</span><h2>Деталі запису</h2></div><button type="button" className="text-button" onClick={() => { resetReviewForm(); setSelected(undefined); }}>Закрити</button></div>
-            <dl className="detail-grid">
-              <DetailItem label="ID запису" value={selected.id} /><DetailItem label="ПІБ" value={selected.fullName} />
-              <DetailItem label="Номер жетона" value={selected.badgeNumber} /><DetailItem label="УПП" value={selected.department} />
-              <DetailItem label="Підрозділ" value={selected.unit || '—'} />
-              <DetailItem label="Екіпаж / підрозділ" value={selected.crewNumber || '—'} />
-              <DetailItem label="Автомобіль" value={displayVehicle(selected.vehicleNumber)} /><DetailItem label="Початок зміни" value={formatDate(selected.startedAt)} />
-              <DetailItem label="Завершення зміни" value={formatDate(selected.endedAt)} /><DetailItem label="Початковий кілометраж" value={`${selected.startOdometer} км`} />
-              <DetailItem label="Кінцевий кілометраж" value={selected.endOdometer === undefined ? '—' : `${selected.endOdometer} км`} />
-              <DetailItem label="Пробіг" value={selected.distanceKm === undefined ? '—' : `${selected.distanceKm} км`} />
-              <DetailItem label="Заправка" value={selected.refueled ? 'Так' : 'Ні'} />
-              <DetailItem label="Кількість літрів" value={selected.refueled ? `${selected.fuelLiters ?? '—'} л` : '—'} />
-              <DetailItem label="Спосіб внесення на початку" value={selected.startManualEntry ? 'Внесено вручну' : '—'} />
-              <DetailItem label="Спосіб внесення в кінці" value={selected.endManualEntry === undefined ? '—' : selected.endManualEntry ? 'Внесено вручну' : '—'} />
-              <DetailItem label="Статус" value={<span className={`status ${selected.status}`}>{statusLabels[selected.status]}</span>} />
-            </dl>
-            <section className="admin-review-box">
-              <div className="section-heading inline-heading"><div><span className="eyebrow">Адміністративна перевірка</span><h3>Стан перевірки</h3></div></div>
-              <dl className="detail-grid">
-                <DetailItem label="Поточний статус" value={<span className={`status ${selected.status}`}>{statusLabels[selected.status]}</span>} />
-                <DetailItem label="Дата перевірки" value={formatDate(selected.adminVerifiedAt ?? undefined)} />
-                <DetailItem label="Ким перевірено" value={selected.adminVerifiedBy || '—'} />
-                <DetailItem label="Коментар адміністратора" value={selected.adminReviewComment || '—'} />
-              </dl>
-              <div className="button-row compact-row">
-                {(selected.status === 'completed' || selected.status === 'needs_review') && (
-                  <button type="button" className="small-button" onClick={() => openReviewAction('verify')}>Позначити як перевірено</button>
-                )}
-                {selected.status === 'needs_review' && (
-                  <button type="button" className="small-button secondary" onClick={() => openReviewAction('comment')}>Залишити коментар</button>
-                )}
-                {selected.status === 'verified' && (
-                  <>
-                    <span className="message success compact-message">Перевірено адміністратором</span>
-                    <button type="button" className="small-button danger-mini" onClick={() => openReviewAction('needs_review')}>Повернути на перевірку</button>
-                  </>
-                )}
-                {selected.status === 'active' && <span className="field-hint">Активну незавершену зміну не можна перевірити.</span>}
-              </div>
-              {reviewSuccess && <p className="message success compact-review-message" role="status">{reviewSuccess}</p>}
-              {reviewError && <p className="message error compact-review-message" role="alert">{reviewError}</p>}
-              {reviewAction && (
-                <form className="admin-review-form" onSubmit={(event) => void submitReviewAction(event)}>
-                  <label>
-                    Коментар адміністратора
-                    <textarea
-                      value={reviewComment}
-                      disabled={reviewSubmitting}
-                      onChange={(event) => setReviewComment(event.target.value)}
-                      placeholder={reviewAction === 'verify'
-                        ? 'Наприклад: Кілометраж звірено з фото одометра. Порушень не виявлено.'
-                        : reviewAction === 'comment'
-                          ? 'Наприклад: Потрібно додатково звірити фото кінцевого одометра.'
-                          : 'Наприклад: Потрібно додатково перевірити показник кінцевого одометра.'}
-                    />
-                  </label>
-                  <div className="modal-actions">
-                    <button type="submit" disabled={reviewSubmitting}>
-                      {reviewSubmitting
-                        ? (reviewAction === 'verify' ? 'Підтверджуємо...' : 'Зберігаємо...')
-                        : reviewAction === 'verify'
-                          ? 'Підтвердити перевірку'
-                          : reviewAction === 'comment'
-                            ? 'Зберегти коментар'
-                            : 'Залишити на перевірці'}
-                    </button>
-                    <button type="button" className="secondary" disabled={reviewSubmitting} onClick={() => setReviewAction(null)}>Скасувати</button>
-                  </div>
-                </form>
-              )}
-            </section>
-            <div className="photo-grid detail-photos">
-              <figure><figcaption>Фото на початку зміни</figcaption><StoredPhoto photoId={selected.startPhotoId} alt="Одометр на початку зміни" /></figure>
-              <figure><figcaption>Фото наприкінці зміни</figcaption><StoredPhoto photoId={selected.endPhotoId} alt="Одометр наприкінці зміни" /></figure>
-            </div>
-          </section>
-        </div>
+        <RouteSheetDetailsModal
+          selected={selected}
+          reviewAction={reviewAction}
+          reviewComment={reviewComment}
+          reviewSubmitting={reviewSubmitting}
+          reviewError={reviewError}
+          reviewSuccess={reviewSuccess}
+          displayVehicle={displayVehicle}
+          onClose={() => { resetReviewForm(); setSelected(undefined); }}
+          onOpenReviewAction={openReviewAction}
+          onSubmitReviewAction={submitReviewAction}
+          onReviewCommentChange={setReviewComment}
+          onCancelReviewAction={() => setReviewAction(null)}
+        />
       )}
 
       {selectedMonthly && (
-        <div className="modal-backdrop" onMouseDown={() => setSelectedMonthly(undefined)}>
-          <section className="modal detail-modal monthly-detail-modal" role="dialog" aria-modal="true" aria-label="Деталі місячного маршрутного листа" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="section-heading"><div><span className="eyebrow">Маршрутний лист авто</span><h2>Деталі місячного листа</h2></div><button type="button" className="text-button" onClick={() => setSelectedMonthly(undefined)}>Закрити</button></div>
-            <dl className="detail-grid">
-              <DetailItem label="Автомобіль" value={`${selectedMonthly.vehicleBrand} ${selectedMonthly.vehicleModel}`} />
-              <DetailItem label="Номерний знак" value={selectedMonthly.displayVehicleNumber || selectedMonthly.vehicleNumber} />
-              <DetailItem label="УПП" value={selectedMonthly.department} />
-              <DetailItem label="Підрозділ" value={selectedMonthly.unit || '—'} />
-              <DetailItem label="Місяць/рік" value={`${monthNames[selectedMonthly.month - 1] ?? selectedMonthly.month} ${selectedMonthly.year}`} />
-              <DetailItem label="Початковий кілометраж" value={selectedMonthly.openingOdometer === null || selectedMonthly.openingOdometer === undefined ? '—' : `${selectedMonthly.openingOdometer} км`} />
-              <DetailItem label="Кінцевий кілометраж" value={selectedMonthly.closingOdometer === null || selectedMonthly.closingOdometer === undefined ? '—' : `${selectedMonthly.closingOdometer} км`} />
-              <DetailItem label="Сумарний пробіг" value={`${selectedMonthly.totalDistanceKm} км`} />
-              <DetailItem label="Сумарна заправка" value={`${selectedMonthly.totalFuelLiters.toLocaleString('uk-UA')} л`} />
-              <DetailItem label="Статус" value={<span className={`status ${selectedMonthly.status}`}>{monthlyStatusLabels[selectedMonthly.status] ?? selectedMonthly.status}</span>} />
-            </dl>
-            <section className="fuel-accounting-card">
-              <div className="section-heading inline-heading"><div><span className="eyebrow">Автомобіль</span><h3>Облік пального</h3></div></div>
-              <dl className="detail-grid">
-                <DetailItem label="Початковий залишок" value={formatLiters(selectedMonthly.fuelSummary?.initialFuelLiters)} />
-                <DetailItem label="Заправлено за місяць" value={formatLiters(selectedMonthly.fuelSummary?.totalRefueledLiters ?? selectedMonthly.totalFuelLiters)} />
-                <DetailItem label="Пробіг за місяць" value={`${selectedMonthly.fuelSummary?.totalDistanceKm ?? selectedMonthly.totalDistanceKm} км`} />
-                <DetailItem label="Норма витрати" value={formatConsumption(selectedMonthly.fuelSummary?.fuelConsumptionPer100Km)} />
-                <DetailItem label="Обʼєм бака" value={formatLiters(selectedMonthly.fuelSummary?.fuelTankCapacityLiters)} />
-                <DetailItem label="Розрахункова витрата" value={formatLiters(selectedMonthly.fuelSummary?.estimatedFuelUsedLiters)} />
-                <DetailItem label="Розрахунковий залишок" value={formatLiters(selectedMonthly.fuelSummary?.estimatedFuelBalanceLiters)} />
-              </dl>
-              {!!selectedMonthly.fuelSummary?.fuelWarnings.length && <div className="message warning" role="status">{selectedMonthly.fuelSummary.fuelWarnings.map((warning) => <p key={warning}>{warning}</p>)}</div>}
-            </section>
-            <div className="button-row compact-row">
-              <button type="button" className="small-button" onClick={() => void openMonthlyPrint(selectedMonthly.id)}>Друк</button>
-              {selectedMonthly.status === 'closed' ? (
-                <button type="button" className="small-button" onClick={() => void reopenMonth(selectedMonthly.id)}>Повернути в роботу</button>
-              ) : (
-                <button type="button" className="small-button danger-mini" disabled={selectedMonthly.status !== 'open'} onClick={() => void closeMonth(selectedMonthly.id)}>Закрити місяць</button>
-              )}
-            </div>
-            <div className="table-scroll nested-table">
-              <table className="responsive-table monthly-entries-table">
-                <thead><tr>
-                  <th>Дата</th><th>Час початку</th><th>Час завершення</th><th>ПІБ патрульного</th><th>Жетон</th>
-                  <th>Екіпаж / підрозділ</th><th>Початковий км</th><th>Кінцевий км</th><th>Пробіг</th>
-                  <th>Заправка</th><th>Літри</th><th>Фото початку</th><th>Фото завершення</th><th>Примітка</th><th>Статус</th>
-                </tr></thead>
-                <tbody>{(selectedMonthly.shiftEntries ?? []).map((entry) => (
-                  <tr key={entry.id}>
-                    <td>{formatDate(entry.startedAt, true)}</td><td>{formatDate(entry.startedAt)}</td><td>{formatDate(entry.endedAt)}</td>
-                    <td>{entry.fullName}</td><td>{entry.badgeNumber}</td><td>{entry.crewNumber || '—'}</td>
-                    <td>{entry.startOdometer}</td><td>{entry.endOdometer ?? '—'}</td><td>{entry.distanceKm ?? '—'}</td>
-                    <td>{entry.refueled ? 'Так' : 'Ні'}</td><td>{entry.refueled ? entry.fuelLiters ?? '—' : '—'}</td>
-                    <td><div className="table-photo"><StoredPhoto photoId={entry.startPhotoId} alt="Фото початку зміни" /></div></td>
-                    <td><div className="table-photo"><StoredPhoto photoId={entry.endPhotoId} alt="Фото завершення зміни" /></div></td>
-                    <td>{isCrossMonthShift(entry) ? <span className="meta-badge warning">Перехідна зміна</span> : '—'}</td>
-                    <td><span className={`status ${entry.status}`}>{statusLabels[entry.status]}</span></td>
-                  </tr>
-                ))}</tbody>
-              </table>
-            </div>
-          </section>
-        </div>
+        <MonthlySheetDetailsModal
+          selectedMonthly={selectedMonthly}
+          onClose={() => setSelectedMonthly(undefined)}
+          onOpenPrint={(id) => void openMonthlyPrint(id)}
+          onCloseMonth={(id) => void closeMonth(id)}
+          onReopenMonth={(id) => void reopenMonth(id)}
+        />
       )}
 
       {printMonthly && (
-        <div className="modal-backdrop print-modal-backdrop" onMouseDown={() => setPrintMonthly(undefined)}>
-          <section className="modal print-modal" role="dialog" aria-modal="true" aria-label="Друк місячного маршрутного листа" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="section-heading no-print"><div><span className="eyebrow">Друк</span><h2>Місячний маршрутний лист</h2></div><button type="button" className="text-button" onClick={() => setPrintMonthly(undefined)}>Закрити</button></div>
-            <div className="button-row no-print">
-              <button type="button" onClick={() => void printMonth(printMonthly)}>Друкувати</button>
-            </div>
-            <article className="print-page">
-              <header className="print-header">
-                <h1>ЕЛЕКТРОННИЙ МАРШРУТНИЙ ЛИСТ</h1>
-                <p>службового автомобіля</p>
-              </header>
-              <section className="print-summary-grid">
-                <div><strong>Марка</strong><span>{printMonthly.vehicleBrand}</span></div>
-                <div><strong>Модель</strong><span>{printMonthly.vehicleModel}</span></div>
-                <div><strong>Номерний знак</strong><span>{printMonthly.displayVehicleNumber || printMonthly.vehicleNumber}</span></div>
-                <div><strong>УПП</strong><span>{printMonthly.department}</span></div>
-                <div><strong>Підрозділ</strong><span>{printMonthly.unit || '—'}</span></div>
-                <div><strong>Місяць</strong><span>{monthNames[printMonthly.month - 1] ?? printMonthly.month}</span></div>
-                <div><strong>Рік</strong><span>{printMonthly.year}</span></div>
-              </section>
-              <table className="print-table">
-                <thead><tr>
-                  <th>№</th><th>Дата</th><th>Патрульний</th><th>Жетон</th><th>Початок зміни</th><th>Завершення зміни</th>
-                  <th>Початковий км</th><th>Кінцевий км</th><th>Пробіг</th><th>Заправка, л</th><th>Перевірка</th><th>Примітка</th>
-                </tr></thead>
-                <tbody>{(printMonthly.shiftEntries ?? []).map((entry, index) => (
-                  <tr key={entry.id}>
-                    <td>{index + 1}</td><td>{formatDate(entry.startedAt, true)}</td><td>{entry.fullName}</td><td>{entry.badgeNumber}</td>
-                    <td>{formatDate(entry.startedAt)}</td><td>{formatDate(entry.endedAt)}</td><td>{entry.startOdometer}</td>
-                    <td>{entry.endOdometer ?? '—'}</td><td>{entry.distanceKm ?? '—'}</td><td>{entry.refueled ? entry.fuelLiters ?? '—' : '—'}</td>
-                    <td>{entry.status === 'verified' ? 'Перевірено' : entry.status === 'needs_review' ? 'Потребує перевірки' : '—'}</td>
-                    <td>{[isCrossMonthShift(entry) ? 'Перехідна зміна' : '', entry.adminReviewComment || ''].filter(Boolean).join('; ')}</td>
-                  </tr>
-                ))}</tbody>
-              </table>
-              <section className="print-totals">
-                <p>Початковий кілометраж за місяць: <strong>{printMonthly.openingOdometer ?? '—'}</strong></p>
-                <p>Кінцевий кілометраж за місяць: <strong>{printMonthly.closingOdometer ?? '—'}</strong></p>
-                <p>Загальний пробіг: <strong>{printMonthly.totalDistanceKm} км</strong></p>
-                <p>Загальна кількість літрів заправки: <strong>{printMonthly.totalFuelLiters.toLocaleString('uk-UA')} л</strong></p>
-                <p>Кількість змін: <strong>{printMonthly.shiftEntries?.length ?? printMonthly.shiftCount ?? 0}</strong></p>
-              </section>
-              <section className="print-totals">
-                <p><strong>Облік пального</strong></p>
-                <p>Початковий залишок: <strong>{formatLiters(printMonthly.fuelSummary?.initialFuelLiters)}</strong></p>
-                <p>Заправлено за місяць: <strong>{formatLiters(printMonthly.fuelSummary?.totalRefueledLiters ?? printMonthly.totalFuelLiters)}</strong></p>
-                <p>Пробіг за місяць: <strong>{printMonthly.fuelSummary?.totalDistanceKm ?? printMonthly.totalDistanceKm} км</strong></p>
-                <p>Норма витрати: <strong>{formatConsumption(printMonthly.fuelSummary?.fuelConsumptionPer100Km)}</strong></p>
-                <p>Обʼєм бака: <strong>{formatLiters(printMonthly.fuelSummary?.fuelTankCapacityLiters)}</strong></p>
-                <p>Розрахункова витрата: <strong>{formatLiters(printMonthly.fuelSummary?.estimatedFuelUsedLiters)}</strong></p>
-                <p>Розрахунковий залишок: <strong>{formatLiters(printMonthly.fuelSummary?.estimatedFuelBalanceLiters)}</strong></p>
-              </section>
-              {!!printMonthly.fuelSummary?.fuelWarnings.length && <section className="print-totals"><p><strong>Попередження щодо пального:</strong></p>{printMonthly.fuelSummary.fuelWarnings.map((warning) => <p key={warning}>{warning}</p>)}</section>}
-              <section className="signature-block">
-                <p>Кінцевий кілометраж звірено: ______________________</p>
-                <p>Адміністратор: ______________________</p>
-                <p>Підпис: ______________________</p>
-                <p>Дата: ____ / ____ / ______</p>
-              </section>
-            </article>
-          </section>
-        </div>
+        <MonthlySheetPrintModal
+          printMonthly={printMonthly}
+          onClose={() => setPrintMonthly(undefined)}
+          onPrint={(monthlyRouteSheet) => void printMonth(monthlyRouteSheet)}
+        />
       )}
       {deleteTarget && (
         <DeleteConfirmModal

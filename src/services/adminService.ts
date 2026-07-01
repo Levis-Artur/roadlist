@@ -1,4 +1,5 @@
 import type { AdminRole, AdminUser } from '../types';
+import { adminRoleLabels } from '../utils/roles';
 import { ApiUnavailableError, apiDelete, apiGet, apiPatch, apiPost, getApiUrl } from './apiClient';
 
 const ADMIN_TOKEN_KEY = 'admin_token';
@@ -29,14 +30,10 @@ interface AdminRecoveryResponse extends AdminResponse {
   temporaryPassword?: string;
 }
 
-export const adminRoleLabels: Record<AdminRole, string> = {
-  SYSTEM_OWNER: 'Власник системи',
-  NATIONAL_ADMIN: 'Національний адміністратор',
-  REGIONAL_ADMIN: 'Регіональний адміністратор',
-};
+export { adminRoleLabels };
 
 export async function loginAdmin(username: string, password: string): Promise<AdminLoginResponse> {
-  const response = await apiPost<AdminLoginResponse>('/api/admin/login', { username, password });
+  const response = await apiPost<AdminLoginResponse>('/api/admin/login', { username, password }, { auth: 'none' });
   if (response.temporaryToken) sessionStorage.setItem(ADMIN_PENDING_TOKEN_KEY, response.temporaryToken);
   if (response.token && response.admin) finishAdminLogin(response.token, response.admin);
   return response;
@@ -95,12 +92,12 @@ export function canDeleteRecords(admin: AdminUser | null): boolean {
 }
 
 export async function getAdminUsers(): Promise<AdminUser[]> {
-  const response = await apiGet<AdminListResponse>('/api/admin/users');
+  const response = await apiGet<AdminListResponse>('/api/admin/users', { auth: 'admin' });
   return response.admins;
 }
 
 export async function getMyAdminProfile(): Promise<AdminUser> {
-  return (await apiGet<AdminResponse>('/api/admin/me')).admin;
+  return (await apiGet<AdminResponse>('/api/admin/me', { auth: 'admin' })).admin;
 }
 
 export async function changeOwnPassword(input: {
@@ -172,7 +169,7 @@ export async function createAdminUser(input: {
   password: string;
   isActive: boolean;
 }): Promise<AdminUser> {
-  return (await apiPost<AdminResponse>('/api/admin/users', input)).admin;
+  return (await apiPost<AdminResponse>('/api/admin/users', input, { auth: 'admin' })).admin;
 }
 
 export async function updateAdminUser(id: string, input: Partial<{
@@ -186,23 +183,14 @@ export async function updateAdminUser(id: string, input: Partial<{
   password: string;
   isActive: boolean;
 }>): Promise<AdminUser> {
-  return (await apiPatch<AdminResponse>(`/api/admin/users/${encodeURIComponent(id)}`, input)).admin;
+  return (await apiPatch<AdminResponse>(`/api/admin/users/${encodeURIComponent(id)}`, input, { auth: 'admin' })).admin;
 }
 
 export async function recoverAdminAccess(id: string, input: { resetPassword: boolean; resetTwoFactor: boolean }): Promise<{ admin: AdminUser; temporaryPassword?: string }> {
-  const response = await apiPost<AdminRecoveryResponse>(`/api/admin/users/${encodeURIComponent(id)}/recover-access`, input);
+  const response = await apiPost<AdminRecoveryResponse>(`/api/admin/users/${encodeURIComponent(id)}/recover-access`, input, { auth: 'admin' });
   return { admin: response.admin, temporaryPassword: response.temporaryPassword };
-}
-
-export async function resetAdminPassword(id: string): Promise<{ admin: AdminUser; temporaryPassword?: string }> {
-  const response = await apiPatch<AdminRecoveryResponse>(`/api/admin/users/${encodeURIComponent(id)}/password`, {});
-  return { admin: response.admin, temporaryPassword: response.temporaryPassword };
-}
-
-export async function resetAdminTwoFactor(id: string): Promise<AdminUser> {
-  return (await apiPost<AdminResponse>(`/api/admin/users/${encodeURIComponent(id)}/2fa/reset`)).admin;
 }
 
 export async function deactivateAdminUser(id: string, input: { reason: string; confirmText: string }): Promise<void> {
-  await apiDelete(`/api/admin/users/${encodeURIComponent(id)}`, input);
+  await apiDelete(`/api/admin/users/${encodeURIComponent(id)}`, input, { auth: 'admin' });
 }

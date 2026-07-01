@@ -1,20 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
-import { DEPARTMENTS } from '../constants/departments';
 import { createOfficer, deactivateOfficer, getOfficers, PIN_ERROR, updateOfficer } from '../services/officerService';
 import { getDepartments, getDepartmentUnits } from '../services/organizationService';
 import { canDeleteRecords } from '../services/adminService';
 import type { AdminUser, CreateOfficerInput, Department, DepartmentUnit, Officer } from '../types';
 import { BADGE_NUMBER_ERROR, isValidBadgeNumber, sanitizeBadgeNumber } from '../utils/badgeNumber';
+import { downloadCsvFile } from '../utils/csv';
+import { formatDate } from '../utils/format';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 
 function defaultForm(currentAdmin: AdminUser): CreateOfficerInput {
+  const regionalDepartment = currentAdmin.departmentName || currentAdmin.department || '';
   return {
     badgeNumber: '',
     fullName: '',
-    department: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.department || '' : DEPARTMENTS[0],
+    department: currentAdmin.role === 'REGIONAL_ADMIN' ? regionalDepartment : '',
     unit: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.unit || '' : '',
     departmentId: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.departmentId || null : null,
-    departmentName: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.departmentName || currentAdmin.department || '' : DEPARTMENTS[0],
+    departmentName: currentAdmin.role === 'REGIONAL_ADMIN' ? regionalDepartment : '',
     departmentUnitId: null,
     departmentUnitName: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.unit || '' : '',
     pin: '',
@@ -32,16 +34,10 @@ function downloadCsv(officers: Officer[]) {
       item.unit || '',
       item.isActive === false ? 'Неактивний' : 'Активний',
       item.hasPin ? 'Так' : 'Ні',
-      item.createdAt ? new Date(item.createdAt).toLocaleString('uk-UA') : '',
+      item.createdAt ? formatDate(item.createdAt) : '',
     ]),
   ];
-  const csv = `\uFEFF${rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';')).join('\r\n')}`;
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'officers-export.csv';
-  link.click();
-  URL.revokeObjectURL(url);
+  downloadCsvFile('officers-export.csv', rows);
 }
 
 export function OfficerDirectory({ currentAdmin }: { currentAdmin: AdminUser }) {
@@ -112,8 +108,8 @@ export function OfficerDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
     return {
       ...defaultForm(currentAdmin),
       departmentId: departmentItem?.id || currentAdmin.departmentId || null,
-      department: departmentItem?.name || currentAdmin.department || DEPARTMENTS[0],
-      departmentName: departmentItem?.name || currentAdmin.departmentName || currentAdmin.department || DEPARTMENTS[0],
+      department: departmentItem?.name || currentAdmin.departmentName || currentAdmin.department || '',
+      departmentName: departmentItem?.name || currentAdmin.departmentName || currentAdmin.department || '',
     };
   }
 
@@ -187,7 +183,7 @@ export function OfficerDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
     <div className="directory-toolbar">
       <div><span className="eyebrow">Довідник</span><h2>Користувачі</h2></div>
       <div className="admin-actions">
-        <button onClick={() => showForm()}>Додати патрульного</button>
+        <button onClick={() => showForm()} disabled={!isRegional && !departments.length}>Додати патрульного</button>
         <button className="secondary compact" onClick={() => void load()}>Оновити</button>
         <button className="secondary compact" onClick={() => downloadCsv(filtered)} disabled={!filtered.length}>Експорт CSV</button>
       </div>
@@ -204,7 +200,7 @@ export function OfficerDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
     {error && <p className="message error" role="alert">{error}</p>}
     {success && <p className="message success" role="status">{success}</p>}
 
-    {loading ? <div className="empty-state compact-empty">Завантаження…</div> : !officers.length ? <div className="empty-state compact-empty"><p>Користувачів ще не додано.</p></div> : !filtered.length ? <div className="empty-state compact-empty"><p>Користувачів за вибраними фільтрами не знайдено.</p></div> : <div className="table-card"><div className="table-scroll"><table className="responsive-table officers-table"><thead><tr><th>Жетон</th><th>ПІБ</th><th>УПП</th><th>Підрозділ</th><th>Активний</th><th>PIN встановлено</th><th>Дата створення</th><th>Дії</th></tr></thead><tbody>{filtered.map((item) => <tr key={item.id ?? item.badgeNumber}><td>{item.badgeNumber}</td><td>{item.fullName}</td><td>{item.department}</td><td>{item.unit || '—'}</td><td><span className={`status ${item.isActive === false ? 'needs_review' : 'completed'}`}>{item.isActive === false ? 'Ні' : 'Так'}</span></td><td>{item.hasPin ? 'Так' : 'Ні'}</td><td>{item.createdAt ? new Date(item.createdAt).toLocaleString('uk-UA') : '—'}</td><td className="row-actions"><button className="small-button" onClick={() => showForm(item)}>Редагувати</button>{canDelete && item.isActive !== false && <button className="small-button danger-outline" onClick={() => setDeleteTarget(item)}>Видалити</button>}</td></tr>)}</tbody></table></div></div>}
+    {loading ? <div className="empty-state compact-empty">Завантаження…</div> : !officers.length ? <div className="empty-state compact-empty"><p>Користувачів ще не додано.</p></div> : !filtered.length ? <div className="empty-state compact-empty"><p>Користувачів за вибраними фільтрами не знайдено.</p></div> : <div className="table-card"><div className="table-scroll"><table className="responsive-table officers-table"><thead><tr><th>Жетон</th><th>ПІБ</th><th>УПП</th><th>Підрозділ</th><th>Активний</th><th>PIN встановлено</th><th>Дата створення</th><th>Дії</th></tr></thead><tbody>{filtered.map((item) => <tr key={item.id ?? item.badgeNumber}><td>{item.badgeNumber}</td><td>{item.fullName}</td><td>{item.department}</td><td>{item.unit || '—'}</td><td><span className={`status ${item.isActive === false ? 'needs_review' : 'completed'}`}>{item.isActive === false ? 'Ні' : 'Так'}</span></td><td>{item.hasPin ? 'Так' : 'Ні'}</td><td>{formatDate(item.createdAt)}</td><td className="row-actions"><button className="small-button" onClick={() => showForm(item)}>Редагувати</button>{canDelete && item.isActive !== false && <button className="small-button danger-outline" onClick={() => setDeleteTarget(item)}>Видалити</button>}</td></tr>)}</tbody></table></div></div>}
 
     {open && <div className="modal-backdrop" onMouseDown={() => setOpen(false)}><form className="modal directory-modal" onSubmit={save} onMouseDown={(event) => event.stopPropagation()}>
       <div className="section-heading"><h2>{editing ? 'Редагування патрульного' : 'Новий патрульний'}</h2><button type="button" className="text-button" onClick={() => setOpen(false)}>Закрити</button></div>

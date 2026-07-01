@@ -16,41 +16,41 @@ function queryString(filters: Record<string, unknown> = {}) {
 }
 
 export async function getDepartments(): Promise<Department[]> {
-  return extractList<Department>(await apiGet<DepartmentsResponse>('/api/departments'), 'departments');
+  return extractList<Department>(await apiGet<DepartmentsResponse>('/api/departments', { auth: 'admin' }), 'departments');
 }
 
 export async function createDepartment(input: { name: string; code?: string | null; region?: string | null; isActive?: boolean }): Promise<Department> {
-  const department = extractEntity<Department>(await apiPost<DepartmentResponse>('/api/departments', input), 'department');
+  const department = extractEntity<Department>(await apiPost<DepartmentResponse>('/api/departments', input, { auth: 'admin' }), 'department');
   if (!department) throw new Error('Не вдалося створити управління.');
   return department;
 }
 
 export async function updateDepartment(id: string, input: Partial<{ name: string; code: string | null; region: string | null; isActive: boolean }>): Promise<Department> {
-  const department = extractEntity<Department>(await apiPatch<DepartmentResponse>(`/api/departments/${encodeURIComponent(id)}`, input), 'department');
+  const department = extractEntity<Department>(await apiPatch<DepartmentResponse>(`/api/departments/${encodeURIComponent(id)}`, input, { auth: 'admin' }), 'department');
   if (!department) throw new Error('Не вдалося оновити управління.');
   return department;
 }
 
 export async function deleteDepartment(id: string, input: { reason: string; confirmText: string }): Promise<void> {
-  await apiDelete(`/api/departments/${encodeURIComponent(id)}`, input);
+  await apiDelete(`/api/departments/${encodeURIComponent(id)}`, input, { auth: 'admin' });
 }
 
 export async function getDepartmentUnits(filters: { departmentId?: string; isActive?: boolean } = {}): Promise<DepartmentUnit[]> {
-  return extractList<DepartmentUnit>(await apiGet<DepartmentUnitsResponse>(`/api/department-units${queryString(filters)}`), 'departmentUnits');
+  return extractList<DepartmentUnit>(await apiGet<DepartmentUnitsResponse>(`/api/department-units${queryString(filters)}`, { auth: 'admin' }), 'departmentUnits');
 }
 
 export async function createDepartmentUnit(input: { departmentId: string; name: string; type?: string | null; code?: string | null; description?: string | null; isActive?: boolean }): Promise<DepartmentUnit> {
-  const unit = extractEntity<DepartmentUnit>(await apiPost<DepartmentUnitResponse>('/api/department-units', input), 'departmentUnit');
+  const unit = extractEntity<DepartmentUnit>(await apiPost<DepartmentUnitResponse>('/api/department-units', input, { auth: 'admin' }), 'departmentUnit');
   if (!unit) throw new Error('Не вдалося створити внутрішній підрозділ.');
   return unit;
 }
 
 export async function updateDepartmentUnit(id: string, input: Partial<{ name: string; type: string | null; code: string | null; description: string | null; isActive: boolean }>): Promise<DepartmentUnit> {
-  const unit = extractEntity<DepartmentUnit>(await apiPatch<DepartmentUnitResponse>(`/api/department-units/${encodeURIComponent(id)}`, input), 'departmentUnit');
+  const unit = extractEntity<DepartmentUnit>(await apiPatch<DepartmentUnitResponse>(`/api/department-units/${encodeURIComponent(id)}`, input, { auth: 'admin' }), 'departmentUnit');
   if (!unit) throw new Error('Не вдалося оновити внутрішній підрозділ.');
   return unit;
 }
 
 export async function deleteDepartmentUnit(id: string, input: { reason: string; confirmText: string }): Promise<void> {
-  await apiDelete(`/api/department-units/${encodeURIComponent(id)}`, input);
+  await apiDelete(`/api/department-units/${encodeURIComponent(id)}`, input, { auth: 'admin' });
 }

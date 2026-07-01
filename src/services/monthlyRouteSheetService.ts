@@ -22,21 +22,21 @@ function queryString(filters: MonthlyRouteSheetFilters = {}) {
 
 export async function getMonthlyRouteSheets(filters: MonthlyRouteSheetFilters = {}): Promise<MonthlyRouteSheet[]> {
   return extractList<MonthlyRouteSheet>(
-    await apiGet<MonthlyRouteSheetsResponse>(`/api/monthly-route-sheets${queryString(filters)}`),
+    await apiGet<MonthlyRouteSheetsResponse>(`/api/monthly-route-sheets${queryString(filters)}`, { auth: 'admin' }),
     'monthlyRouteSheets',
   );
 }
 
 export async function getMonthlyRouteSheetById(id: string): Promise<MonthlyRouteSheet | null> {
   return extractEntity<MonthlyRouteSheet>(
-    await apiGet<MonthlyRouteSheetResponse>(`/api/monthly-route-sheets/${encodeURIComponent(id)}`),
+    await apiGet<MonthlyRouteSheetResponse>(`/api/monthly-route-sheets/${encodeURIComponent(id)}`, { auth: 'admin' }),
     'monthlyRouteSheet',
   );
 }
 
 export async function closeMonthlyRouteSheet(id: string): Promise<MonthlyRouteSheet> {
   const monthlyRouteSheet = extractEntity<MonthlyRouteSheet>(
-    await apiPost<MonthlyRouteSheetResponse>(`/api/monthly-route-sheets/${encodeURIComponent(id)}/close`),
+    await apiPost<MonthlyRouteSheetResponse>(`/api/monthly-route-sheets/${encodeURIComponent(id)}/close`, undefined, { auth: 'admin' }),
     'monthlyRouteSheet',
   );
   if (!monthlyRouteSheet) throw new Error('Не вдалося закрити місячний маршрутний лист.');
@@ -45,7 +45,7 @@ export async function closeMonthlyRouteSheet(id: string): Promise<MonthlyRouteSh
 
 export async function reopenMonthlyRouteSheet(id: string): Promise<MonthlyRouteSheet> {
   const monthlyRouteSheet = extractEntity<MonthlyRouteSheet>(
-    await apiPost<MonthlyRouteSheetResponse>(`/api/monthly-route-sheets/${encodeURIComponent(id)}/reopen`),
+    await apiPost<MonthlyRouteSheetResponse>(`/api/monthly-route-sheets/${encodeURIComponent(id)}/reopen`, undefined, { auth: 'admin' }),
     'monthlyRouteSheet',
   );
   if (!monthlyRouteSheet) throw new Error('Не вдалося повернути місячний маршрутний лист у роботу.');
@@ -54,7 +54,7 @@ export async function reopenMonthlyRouteSheet(id: string): Promise<MonthlyRouteS
 
 export async function markMonthlyRouteSheetPrinted(id: string): Promise<MonthlyRouteSheet> {
   const monthlyRouteSheet = extractEntity<MonthlyRouteSheet>(
-    await apiPost<MonthlyRouteSheetResponse>(`/api/monthly-route-sheets/${encodeURIComponent(id)}/mark-printed`),
+    await apiPost<MonthlyRouteSheetResponse>(`/api/monthly-route-sheets/${encodeURIComponent(id)}/mark-printed`, undefined, { auth: 'admin' }),
     'monthlyRouteSheet',
   );
   if (!monthlyRouteSheet) throw new Error('Не вдалося позначити місячний маршрутний лист як надрукований.');
@@ -63,11 +63,11 @@ export async function markMonthlyRouteSheetPrinted(id: string): Promise<MonthlyR
 
 export async function getMonthlyRouteSheetPrintData(id: string): Promise<MonthlyRouteSheet | null> {
   return extractEntity<MonthlyRouteSheet>(
-    await apiGet<MonthlyRouteSheetResponse>(`/api/monthly-route-sheets/${encodeURIComponent(id)}/print-data`),
+    await apiGet<MonthlyRouteSheetResponse>(`/api/monthly-route-sheets/${encodeURIComponent(id)}/print-data`, { auth: 'admin' }),
     'monthlyRouteSheet',
   );
 }
 
 export async function deleteMonthlyRouteSheet(id: string, input: { reason: string; confirmText: string }): Promise<void> {
-  await apiDelete(`/api/monthly-route-sheets/${encodeURIComponent(id)}`, input);
+  await apiDelete(`/api/monthly-route-sheets/${encodeURIComponent(id)}`, input, { auth: 'admin' });
 }

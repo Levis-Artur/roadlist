@@ -28,13 +28,13 @@ function queryString(filters: OfficerFilters) {
 }
 
 export async function getOfficers(filters: OfficerFilters = {}): Promise<Officer[]> {
-  return extractList<Officer>(await apiGet<unknown>(`/api/officers${queryString(filters)}`), 'officers');
+  return extractList<Officer>(await apiGet<unknown>(`/api/officers${queryString(filters)}`, { auth: 'admin' }), 'officers');
 }
 
 export async function createOfficer(input: CreateOfficerInput): Promise<Officer> {
   if (!isValidBadgeNumber(input.badgeNumber)) throw new Error(BADGE_NUMBER_ERROR);
   if (!PIN_PATTERN.test(input.pin)) throw new Error(PIN_ERROR);
-  const officer = extractEntity<Officer>(await apiPost<unknown>('/api/officers', input), 'officer');
+  const officer = extractEntity<Officer>(await apiPost<unknown>('/api/officers', input, { auth: 'admin' }), 'officer');
   if (!officer) throw new Error('Не вдалося зберегти патрульного. Некоректна відповідь сервера.');
   return officer;
 }
@@ -42,7 +42,7 @@ export async function createOfficer(input: CreateOfficerInput): Promise<Officer>
 export async function updateOfficer(id: string, input: UpdateOfficerInput): Promise<Officer> {
   if (input.badgeNumber !== undefined && !isValidBadgeNumber(input.badgeNumber)) throw new Error(BADGE_NUMBER_ERROR);
   if (input.pin !== undefined && input.pin !== '' && !PIN_PATTERN.test(input.pin)) throw new Error(PIN_ERROR);
-  const officer = extractEntity<Officer>(await apiPatch<unknown>(`/api/officers/${id}`, input), 'officer');
+  const officer = extractEntity<Officer>(await apiPatch<unknown>(`/api/officers/${id}`, input, { auth: 'admin' }), 'officer');
   if (!officer) throw new Error('Не вдалося зберегти патрульного. Некоректна відповідь сервера.');
   return officer;
 }
@@ -51,7 +51,7 @@ export async function loginOfficer(badgeNumber: string, pin: string): Promise<{ 
   const normalizedBadge = badgeNumber.trim();
   if (!isValidBadgeNumber(normalizedBadge)) throw new Error(BADGE_NUMBER_ERROR);
   if (!PIN_PATTERN.test(pin)) throw new Error(PIN_ERROR);
-  const response = await apiPost<OfficerLoginResponse>('/api/officers/login', { badgeNumber: normalizedBadge, pin });
+  const response = await apiPost<OfficerLoginResponse>('/api/officers/login', { badgeNumber: normalizedBadge, pin }, { auth: 'none' });
   sessionStorage.setItem(OFFICER_TOKEN_KEY, response.token);
   sessionStorage.setItem(OFFICER_SESSION_KEY, JSON.stringify(response.officer));
   return { token: response.token, officer: response.officer };
@@ -59,7 +59,7 @@ export async function loginOfficer(badgeNumber: string, pin: string): Promise<{ 
 
 export async function logoutOfficer(): Promise<void> {
   try {
-    if (getOfficerToken()) await apiPost('/api/officers/logout');
+    if (getOfficerToken()) await apiPost('/api/officers/logout', undefined, { auth: 'officer' });
   } finally {
     sessionStorage.removeItem(OFFICER_TOKEN_KEY);
     sessionStorage.removeItem(OFFICER_SESSION_KEY);
@@ -84,14 +84,14 @@ export function getAuthenticatedOfficer(): Officer | null {
 }
 
 export async function deactivateOfficer(id: string, input: { reason?: string; confirmText?: string } = {}): Promise<void> {
-  await apiDelete(`/api/officers/${id}`, input.reason ? input : undefined);
+  await apiDelete(`/api/officers/${id}`, input.reason ? input : undefined, { auth: 'admin' });
 }
 
 export async function verifyOfficerByBadge(badgeNumber: string): Promise<Officer | null> {
   const normalizedBadge = badgeNumber.trim();
   if (!isValidBadgeNumber(normalizedBadge)) throw new Error(BADGE_NUMBER_ERROR);
   try {
-    const response = await apiPost<VerifyOfficerResponse>('/api/officers/verify', { badgeNumber: normalizedBadge });
+    const response = await apiPost<VerifyOfficerResponse>('/api/officers/verify', { badgeNumber: normalizedBadge }, { auth: 'none' });
     return response.success ? response.officer ?? null : null;
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return null;

@@ -26,28 +26,44 @@ export function getApiUrl(path: string): string {
   return `${API_URL}${normalizedPath}`;
 }
 
-async function request<T>(path: string, init: RequestInit): Promise<T> {
+type AuthMode = 'auto' | 'admin' | 'officer' | 'none';
+
+interface ApiRequestOptions {
+  auth?: AuthMode;
+}
+
+function inferAuthMode(path: string): Exclude<AuthMode, 'auto'> {
+  const adminOnlyPath = path.startsWith('/api/admin')
+    || path.startsWith('/api/admin-users')
+    || (path.startsWith('/api/officers')
+      && !path.startsWith('/api/officers/login')
+      && !path.startsWith('/api/officers/logout')
+      && !path.startsWith('/api/officers/verify'))
+    || (path.startsWith('/api/route-sheets')
+      && !path.startsWith('/api/route-sheets/start')
+      && !path.startsWith('/api/route-sheets/finish')
+      && !path.startsWith('/api/route-sheets/active/me'))
+    || path.startsWith('/api/monthly-route-sheets')
+    || path.startsWith('/api/audit')
+    || path.startsWith('/api/departments')
+    || path.startsWith('/api/department-units')
+    || (path.startsWith('/api/vehicles') && !path.startsWith('/api/vehicles/available'));
+  return adminOnlyPath ? 'admin' : 'officer';
+}
+
+function getAuthToken(auth: AuthMode, path: string): string | null {
+  const resolvedAuth = auth === 'auto' ? inferAuthMode(path) : auth;
+  if (resolvedAuth === 'none') return null;
+  if (resolvedAuth === 'admin') return sessionStorage.getItem('admin_token');
+  return sessionStorage.getItem('officer_token') || sessionStorage.getItem('admin_token');
+}
+
+async function request<T>(path: string, init: RequestInit, options: ApiRequestOptions = {}): Promise<T> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 12_000);
   try {
-    const adminOnlyPath = path.startsWith('/api/admin')
-      || path.startsWith('/api/admin-users')
-      || (path.startsWith('/api/officers')
-        && !path.startsWith('/api/officers/login')
-        && !path.startsWith('/api/officers/logout')
-        && !path.startsWith('/api/officers/verify'))
-      || (path.startsWith('/api/route-sheets')
-        && !path.startsWith('/api/route-sheets/start')
-        && !path.startsWith('/api/route-sheets/finish')
-        && !path.startsWith('/api/route-sheets/active/me'))
-      || path.startsWith('/api/monthly-route-sheets')
-      || path.startsWith('/api/audit')
-      || path.startsWith('/api/departments')
-      || path.startsWith('/api/department-units')
-      || (path.startsWith('/api/vehicles') && !path.startsWith('/api/vehicles/available'));
-    const token = adminOnlyPath
-      ? sessionStorage.getItem('admin_token')
-      : sessionStorage.getItem('officer_token') || sessionStorage.getItem('admin_token');
+    const auth = options.auth ?? 'auto';
+    const token = getAuthToken(auth, path);
     const response = await fetch(getApiUrl(path), {
       ...init,
       signal: controller.signal,
@@ -62,7 +78,7 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
       ? await response.json() as { message?: string }
       : undefined;
     if (!response.ok) {
-      if (response.status === 401 && adminOnlyPath) {
+      if (response.status === 401 && (auth === 'admin' || (auth === 'auto' && inferAuthMode(path) === 'admin'))) {
         sessionStorage.removeItem('admin_token');
         sessionStorage.removeItem('admin_user');
         window.dispatchEvent(new CustomEvent('admin-session-expired'));
@@ -82,34 +98,34 @@ async function request<T>(path: string, init: RequestInit): Promise<T> {
   }
 }
 
-export function apiGet<T>(path: string): Promise<T> {
-  return request<T>(path, { method: 'GET' });
+export function apiGet<T>(path: string, options?: ApiRequestOptions): Promise<T> {
+  return request<T>(path, { method: 'GET' }, options);
 }
 
-export function apiPost<T>(path: string, body?: unknown): Promise<T> {
+export function apiPost<T>(path: string, body?: unknown, options?: ApiRequestOptions): Promise<T> {
   return request<T>(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  }, options);
 }
 
-export function apiPatch<T>(path: string, body: unknown): Promise<T> {
+export function apiPatch<T>(path: string, body: unknown, options?: ApiRequestOptions): Promise<T> {
   return request<T>(path, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  });
+  }, options);
 }
 
-export function apiDelete(path: string, body?: unknown): Promise<void> {
+export function apiDelete(path: string, body?: unknown, options?: ApiRequestOptions): Promise<void> {
   return request<void>(path, {
     method: 'DELETE',
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  }, options);
 }
 
-export function apiUpload<T>(path: string, formData: FormData): Promise<T> {
-  return request<T>(path, { method: 'POST', body: formData });
+export function apiUpload<T>(path: string, formData: FormData, options?: ApiRequestOptions): Promise<T> {
+  return request<T>(path, { method: 'POST', body: formData }, options);
 }

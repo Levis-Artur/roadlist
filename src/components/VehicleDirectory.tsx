@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { DEPARTMENTS } from '../constants/departments';
 import { createVehicle, deactivateVehicle, getVehicleTransferHistory, getVehicles, transferVehicle, updateVehicle } from '../services/vehicleService';
 import { getDepartments, getDepartmentUnits } from '../services/organizationService';
 import { canDeleteRecords } from '../services/adminService';
 import type { AdminUser, CreateVehicleInput, Department, DepartmentUnit, FuelType, Vehicle, VehicleTransferHistory } from '../types';
+import { downloadCsvFile } from '../utils/csv';
+import { formatConsumption, formatDate, formatLiters } from '../utils/format';
+import { fuelTypeLabels } from '../utils/fuel';
 import { normalizeVehicleNumber } from '../utils/vehicleNumber';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 
 function defaultForm(currentAdmin: AdminUser): CreateVehicleInput {
+  const regionalDepartment = currentAdmin.departmentName || currentAdmin.department || '';
   return {
     displayPlateNumber: '',
     brand: '',
@@ -16,35 +19,18 @@ function defaultForm(currentAdmin: AdminUser): CreateVehicleInput {
     fuelConsumptionPer100Km: null,
     fuelTankCapacityLiters: null,
     initialFuelLiters: null,
-    department: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.department || '' : DEPARTMENTS[0],
+    department: currentAdmin.role === 'REGIONAL_ADMIN' ? regionalDepartment : '',
     unit: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.unit || '' : '',
     departmentId: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.departmentId || null : null,
-    departmentName: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.departmentName || currentAdmin.department || '' : DEPARTMENTS[0],
+    departmentName: currentAdmin.role === 'REGIONAL_ADMIN' ? regionalDepartment : '',
     departmentUnitId: null,
     departmentUnitName: currentAdmin.role === 'REGIONAL_ADMIN' ? currentAdmin.unit || '' : '',
     isActive: true,
   };
 }
 
-const fuelTypeLabels: Record<FuelType, string> = {
-  PETROL: 'Бензин',
-  DIESEL: 'Дизель',
-  LPG: 'Газ',
-  HYBRID: 'Гібрид',
-  ELECTRIC: 'Електро',
-  OTHER: 'Інше',
-};
-
 function numberOrNull(value: string): number | null {
   return value.trim() ? Number(value) : null;
-}
-
-function formatLiters(value?: number | null) {
-  return value === null || value === undefined ? '—' : `${value.toLocaleString('uk-UA', { minimumFractionDigits: 0, maximumFractionDigits: 1 })} л`;
-}
-
-function formatConsumption(value?: number | null) {
-  return value === null || value === undefined ? '—' : `${value.toLocaleString('uk-UA', { minimumFractionDigits: 0, maximumFractionDigits: 1 })} л/100 км`;
 }
 
 function downloadCsv(items: Vehicle[]) {
@@ -62,16 +48,10 @@ function downloadCsv(items: Vehicle[]) {
       item.department,
       item.unit || '',
       item.isActive ? 'Так' : 'Ні',
-      item.createdAt ? new Date(item.createdAt).toLocaleString('uk-UA') : '',
+      item.createdAt ? formatDate(item.createdAt) : '',
     ]),
   ];
-  const csv = `\uFEFF${rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';')).join('\r\n')}`;
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'vehicles-export.csv';
-  link.click();
-  URL.revokeObjectURL(url);
+  downloadCsvFile('vehicles-export.csv', rows);
 }
 
 function VehicleFuelInfo({ item }: { item: Vehicle }) {
@@ -110,7 +90,7 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [transferTarget, setTransferTarget] = useState<Vehicle>();
-  const [transferForm, setTransferForm] = useState<{ newDepartmentId: string; newDepartment: string; newDepartmentUnitId: string; newUnit: string; comment: string }>({ newDepartmentId: '', newDepartment: DEPARTMENTS[0], newDepartmentUnitId: '', newUnit: '', comment: '' });
+  const [transferForm, setTransferForm] = useState<{ newDepartmentId: string; newDepartment: string; newDepartmentUnitId: string; newUnit: string; comment: string }>({ newDepartmentId: '', newDepartment: '', newDepartmentUnitId: '', newUnit: '', comment: '' });
   const [historyTarget, setHistoryTarget] = useState<Vehicle>();
   const [history, setHistory] = useState<VehicleTransferHistory[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<Vehicle | null>(null);
@@ -166,8 +146,8 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
     return {
       ...defaultForm(currentAdmin),
       departmentId: departmentItem?.id || currentAdmin.departmentId || null,
-      department: departmentItem?.name || currentAdmin.department || DEPARTMENTS[0],
-      departmentName: departmentItem?.name || currentAdmin.departmentName || currentAdmin.department || DEPARTMENTS[0],
+      department: departmentItem?.name || currentAdmin.departmentName || currentAdmin.department || '',
+      departmentName: departmentItem?.name || currentAdmin.departmentName || currentAdmin.department || '',
     };
   }
 
@@ -289,7 +269,7 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
     <div className="directory-toolbar">
       <div><span className="eyebrow">Довідник</span><h2>Автомобілі</h2></div>
       <div className="admin-actions">
-        <button onClick={() => showForm()}>Додати автомобіль</button>
+        <button onClick={() => showForm()} disabled={!isRegional && !departments.length}>Додати автомобіль</button>
         <button className="secondary compact" onClick={() => void load()}>Оновити</button>
         <button className="secondary compact" onClick={() => downloadCsv(filtered)} disabled={!filtered.length}>Експорт CSV</button>
       </div>
@@ -305,11 +285,10 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
 
     {error && <p className="message error" role="alert">{error}</p>}
 
-    {loading ? <div className="empty-state compact-empty">Завантаження…</div> : !items.length ? <div className="empty-state compact-empty"><p>Автомобілів ще не додано.</p></div> : !filtered.length ? <div className="empty-state compact-empty"><p>Автомобілів за вибраними фільтрами не знайдено.</p></div> : <div className="table-card"><div className="table-scroll"><table className="responsive-table vehicles-table"><thead><tr><th>Номерний знак</th><th>Нормалізований номер</th><th>Марка</th><th>Модель</th><th>Пальне</th><th>УПП</th><th>Підрозділ</th><th>Активний</th><th>Дата створення</th><th>Дії</th></tr></thead><tbody>{filtered.map((item) => <tr key={item.id}><td>{item.displayPlateNumber ?? item.plateNumber}</td><td>{item.plateNumber}</td><td>{item.brand}</td><td>{item.model}</td><td><VehicleFuelInfo item={item} /></td><td>{item.department}</td><td>{item.unit || '—'}</td><td><span className={`status ${item.isActive ? 'completed' : 'needs_review'}`}>{item.isActive ? 'Так' : 'Ні'}</span></td><td>{item.createdAt ? new Date(item.createdAt).toLocaleString('uk-UA') : '—'}</td><td className="row-actions"><button className="small-button" onClick={() => showForm(item)}>Редагувати</button>{canTransfer && <button className="small-button" onClick={() => openTransfer(item)}>Перемістити</button>}<button className="small-button secondary" onClick={() => void showHistory(item)}>Історія</button>{canDelete && item.isActive && <button className="small-button danger-outline" onClick={() => setDeleteTarget(item)}>Видалити</button>}</td></tr>)}</tbody></table></div></div>}
+    {loading ? <div className="empty-state compact-empty">Завантаження…</div> : !items.length ? <div className="empty-state compact-empty"><p>Автомобілів ще не додано.</p></div> : !filtered.length ? <div className="empty-state compact-empty"><p>Автомобілів за вибраними фільтрами не знайдено.</p></div> : <div className="table-card"><div className="table-scroll"><table className="responsive-table vehicles-table"><thead><tr><th>Номерний знак</th><th>Нормалізований номер</th><th>Марка</th><th>Модель</th><th>Пальне</th><th>УПП</th><th>Підрозділ</th><th>Активний</th><th>Дата створення</th><th>Дії</th></tr></thead><tbody>{filtered.map((item) => <tr key={item.id}><td>{item.displayPlateNumber ?? item.plateNumber}</td><td>{item.plateNumber}</td><td>{item.brand}</td><td>{item.model}</td><td><VehicleFuelInfo item={item} /></td><td>{item.department}</td><td>{item.unit || '—'}</td><td><span className={`status ${item.isActive ? 'completed' : 'needs_review'}`}>{item.isActive ? 'Так' : 'Ні'}</span></td><td>{formatDate(item.createdAt)}</td><td className="row-actions"><button className="small-button" onClick={() => showForm(item)}>Редагувати</button>{canTransfer && <button className="small-button" onClick={() => openTransfer(item)}>Перемістити</button>}<button className="small-button secondary" onClick={() => void showHistory(item)}>Історія</button>{canDelete && item.isActive && <button className="small-button danger-outline" onClick={() => setDeleteTarget(item)}>Видалити</button>}</td></tr>)}</tbody></table></div></div>}
 
     {open && <div className="modal-backdrop" onMouseDown={() => setOpen(false)}><form className="modal directory-modal" onSubmit={save} onMouseDown={(event) => event.stopPropagation()}>
       <div className="section-heading"><h2>{editing ? 'Редагування автомобіля' : 'Новий автомобіль'}</h2><button type="button" className="text-button" onClick={() => setOpen(false)}>Закрити</button></div>
-      <datalist id="vehicle-department-options">{DEPARTMENTS.map((item) => <option key={item} value={item} />)}</datalist>
       <div className="form-grid">
         <label>Номерний знак для відображення<input value={form.displayPlateNumber} onChange={(event) => setForm({ ...form, displayPlateNumber: event.target.value })} placeholder="АА5200МН" required /><small>Нормалізований номер: {normalizeVehicleNumber(form.displayPlateNumber) || '—'}</small></label>
         <label>Марка<input value={form.brand} onChange={(event) => setForm({ ...form, brand: event.target.value })} required /></label>
@@ -341,7 +320,7 @@ export function VehicleDirectory({ currentAdmin }: { currentAdmin: AdminUser }) 
     {historyTarget && <div className="modal-backdrop" onMouseDown={() => setHistoryTarget(undefined)}><div className="modal directory-modal" onMouseDown={(event) => event.stopPropagation()}>
       <div className="section-heading"><h2>Історія переміщень</h2><button type="button" className="text-button" onClick={() => setHistoryTarget(undefined)}>Закрити</button></div>
       <p className="muted">{historyTarget.brand} {historyTarget.model} — {historyTarget.displayPlateNumber ?? historyTarget.plateNumber}</p>
-      {!history.length ? <div className="empty-state compact-empty"><p>Переміщень ще не зафіксовано.</p></div> : <div className="table-scroll"><table className="responsive-table transfer-history-table"><thead><tr><th>Дата</th><th>Переміщення</th><th>Адміністратор</th><th>Коментар</th></tr></thead><tbody>{history.map((item) => <tr key={item.id}><td>{new Date(item.transferredAt).toLocaleString('uk-UA')}</td><td>{formatTransfer(item)}</td><td>{item.transferredByUsername || '—'}</td><td>{item.comment || '—'}</td></tr>)}</tbody></table></div>}
+      {!history.length ? <div className="empty-state compact-empty"><p>Переміщень ще не зафіксовано.</p></div> : <div className="table-scroll"><table className="responsive-table transfer-history-table"><thead><tr><th>Дата</th><th>Переміщення</th><th>Адміністратор</th><th>Коментар</th></tr></thead><tbody>{history.map((item) => <tr key={item.id}><td>{formatDate(item.transferredAt)}</td><td>{formatTransfer(item)}</td><td>{item.transferredByUsername || '—'}</td><td>{item.comment || '—'}</td></tr>)}</tbody></table></div>}
     </div></div>}
     {deleteTarget && <DeleteConfirmModal title="Видалити автомобіль" description={`Буде приховано автомобіль: ${deleteTarget.brand} ${deleteTarget.model} — ${deleteTarget.displayPlateNumber ?? deleteTarget.plateNumber}.`} onCancel={() => setDeleteTarget(null)} onConfirm={(input) => deactivate(deleteTarget, input)} />}
   </section>;

@@ -35,13 +35,13 @@ function routeSheetQuery(filters: RouteSheetFilters = {}) {
 }
 
 export async function getRouteSheets(filters: RouteSheetFilters = {}): Promise<RouteSheet[]> {
-  return extractList<RouteSheet>(await apiGet<unknown>(`/api/route-sheets${routeSheetQuery(filters)}`), 'routeSheets')
+  return extractList<RouteSheet>(await apiGet<unknown>(`/api/route-sheets${routeSheetQuery(filters)}`, { auth: 'admin' }), 'routeSheets')
     .map(normalizeRouteSheet);
 }
 
 export async function getRouteSheetById(id: string): Promise<RouteSheet | null> {
   try {
-    const routeSheet = extractEntity<RouteSheet>(await apiGet<unknown>(`/api/route-sheets/${encodeURIComponent(id)}`), 'routeSheet');
+    const routeSheet = extractEntity<RouteSheet>(await apiGet<unknown>(`/api/route-sheets/${encodeURIComponent(id)}`, { auth: 'admin' }), 'routeSheet');
     return routeSheet ? normalizeRouteSheet(routeSheet) : null;
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return null;
@@ -50,11 +50,11 @@ export async function getRouteSheetById(id: string): Promise<RouteSheet | null> 
 }
 
 export async function deleteRouteSheet(id: string, input: { reason: string; confirmText: string }): Promise<void> {
-  await apiDelete(`/api/route-sheets/${encodeURIComponent(id)}`, input);
+  await apiDelete(`/api/route-sheets/${encodeURIComponent(id)}`, input, { auth: 'admin' });
 }
 
 export async function getActiveRouteSheetByOfficer(badgeNumber: string): Promise<RouteSheet | null> {
-  return extractList<RouteSheet>(await apiGet<unknown>('/api/route-sheets/active/me'), 'routeSheets')
+  return extractList<RouteSheet>(await apiGet<unknown>('/api/route-sheets/active/me', { auth: 'officer' }), 'routeSheets')
     .map(normalizeRouteSheet)
     .find((item) => item.badgeNumber === badgeNumber.trim() && item.status === 'active') ?? null;
 }
@@ -89,7 +89,7 @@ export async function startShift(input: StartShiftInput): Promise<RouteSheet> {
       startOdometer: input.startOdometer,
       startManualEntry: true,
       startPhotoId: input.startPhotoId,
-    });
+    }, { auth: 'officer' });
     const routeSheet = extractEntity<RouteSheet>(response, 'routeSheet');
     if (!routeSheet) throw new Error('Не вдалося зберегти маршрутний лист. Некоректна відповідь сервера.');
     return normalizeRouteSheet(routeSheet);
@@ -111,7 +111,7 @@ export async function finishShift(input: FinishShiftInput): Promise<RouteSheet> 
       endManualEntry: true,
       refueled: Boolean(input.refueled),
       fuelLiters: input.refueled ? input.fuelLiters : null,
-    });
+    }, { auth: 'officer' });
     const routeSheet = extractEntity<RouteSheet>(response, 'routeSheet');
     if (!routeSheet) throw new Error('Не вдалося зберегти маршрутний лист. Некоректна відповідь сервера.');
     return normalizeRouteSheet(routeSheet);
@@ -123,7 +123,7 @@ export async function finishShift(input: FinishShiftInput): Promise<RouteSheet> 
 
 export async function verifyRouteSheet(id: string, comment?: string): Promise<RouteSheet> {
   const routeSheet = extractEntity<RouteSheet>(
-    await apiPost<unknown>(`/api/route-sheets/${encodeURIComponent(id)}/verify`, { comment: comment?.trim() || null }),
+    await apiPost<unknown>(`/api/route-sheets/${encodeURIComponent(id)}/verify`, { comment: comment?.trim() || null }, { auth: 'admin' }),
     'routeSheet',
   );
   if (!routeSheet) throw new Error('Не вдалося позначити запис як перевірений.');
@@ -132,7 +132,7 @@ export async function verifyRouteSheet(id: string, comment?: string): Promise<Ro
 
 export async function markRouteSheetNeedsReview(id: string, comment?: string): Promise<RouteSheet> {
   const routeSheet = extractEntity<RouteSheet>(
-    await apiPost<unknown>(`/api/route-sheets/${encodeURIComponent(id)}/mark-needs-review`, { comment }),
+    await apiPost<unknown>(`/api/route-sheets/${encodeURIComponent(id)}/mark-needs-review`, { comment }, { auth: 'admin' }),
     'routeSheet',
   );
   if (!routeSheet) throw new Error('Не вдалося повернути запис на перевірку.');
@@ -141,7 +141,7 @@ export async function markRouteSheetNeedsReview(id: string, comment?: string): P
 
 export async function updateRouteSheetAdminComment(id: string, comment?: string | null): Promise<RouteSheet> {
   const routeSheet = extractEntity<RouteSheet>(
-    await apiPatch<unknown>(`/api/route-sheets/${encodeURIComponent(id)}/admin-comment`, { comment: comment?.trim() || null }),
+    await apiPatch<unknown>(`/api/route-sheets/${encodeURIComponent(id)}/admin-comment`, { comment: comment?.trim() || null }, { auth: 'admin' }),
     'routeSheet',
   );
   if (!routeSheet) throw new Error('Не вдалося зберегти коментар адміністратора.');

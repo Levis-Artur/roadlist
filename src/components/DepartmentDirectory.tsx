@@ -7,15 +7,11 @@ import { getRouteSheets } from '../services/routeSheetService';
 import { getVehicles } from '../services/vehicleService';
 import type { AdminUser, AuditLog, Department, DepartmentUnit, MonthlyRouteSheet, Officer, RouteSheet, Vehicle } from '../types';
 import { canDeleteRecords } from '../services/adminService';
+import { formatDate } from '../utils/format';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 
 const emptyDepartmentForm = { name: '', code: '', region: '', isActive: true };
 const emptyUnitForm = { name: '', type: '', code: '', description: '', isActive: true };
-
-function formatDate(value?: string | null) {
-  if (!value) return '—';
-  return new Intl.DateTimeFormat('uk-UA', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value));
-}
 
 function inDepartment<T extends { departmentId?: string | null; department?: string | null; departmentName?: string | null }>(item: T, department: Department) {
   return item.departmentId === department.id || item.departmentName === department.name || item.department === department.name;

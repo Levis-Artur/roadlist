@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AdminRole, AdminUser, Department } from '../types';
-import { adminRoleLabels, canDeleteRecords, createAdminUser, deactivateAdminUser, getAdminUsers, recoverAdminAccess, updateAdminUser } from '../services/adminService';
+import { canDeleteRecords, createAdminUser, deactivateAdminUser, getAdminUsers, recoverAdminAccess, updateAdminUser } from '../services/adminService';
 import { getDepartments } from '../services/organizationService';
+import { formatDate } from '../utils/format';
+import { adminRoleLabels } from '../utils/roles';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 
 const emptyForm = { username: '', fullName: '', role: 'REGIONAL_ADMIN' as AdminRole, departmentId: '', department: '', unit: '', password: '', isActive: true };
 const emptyRecoveryForm = { resetPassword: true, resetTwoFactor: true };
-
-function formatDate(value?: string | null) {
-  return value ? new Date(value).toLocaleString('uk-UA') : '—';
-}
 
 function isLocked(item: AdminUser) {
   return item.lockedUntil ? new Date(item.lockedUntil) > new Date() : false;
